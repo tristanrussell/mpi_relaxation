@@ -83,6 +83,10 @@ Module.symvers
 Mkfile.old
 dkms.conf
 
+### MMC ###
+batch/
+*.slurm
+
 ### Make ###
 Makefile
 
