@@ -9,6 +9,37 @@ unsigned long long int SIZE = 50;
 double ACCURACY = 0.01;
 
 /**
+ * Free's the memory of the given 2 dimensional array. This free's both the
+ * sub-arrays and the outer array.
+ *
+ * @param a : The 2 dimensional array to free.
+ */
+void freeArray(double **a, int height) {
+    for (int i = 0; i < height; i++) {
+        free(a[i]);
+    }
+    free(a);
+}
+
+/**
+ * Builds a 2d array of zeros.
+ *
+ * @return : The 2d array of zeros.
+ */
+double **createArray(int height, int width) {
+    double **arr = (double**)malloc((unsigned long)height * sizeof(double*));
+    for (int i = 0; i < height; i++) {
+        arr[i] = (double*)calloc(width, sizeof(double));
+
+        for (int j = 0; j < width; j++) {
+            arr[i][j] = 0.00;
+        }
+    }
+
+    return arr;
+}
+
+/**
  * Takes the input arguments and set the global variables appropriately.
  *
  * The available command line arguments are:
@@ -69,6 +100,104 @@ void processArgs(int argc, char *argv[]) {
     printf("Size:%d,Accuracy:%f\n", (int) (SIZE + 2), ACCURACY);
 }
 
+// Sends a line of results to the next process, dir determines the direction,
+// 0 is up, 1 is down
+void sendResults(double *line, int rank, int loop)
+{
+    MPI_Isend(line, SIZE, MPI_DOUBLE, rank, loop, MPI_COMM_WORLD);
+    MPI_Isend((int*)1, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
+}
+
+void receiveResults(double *top, double *bottom, int myRank, int loop)
+{
+    MPI_Status stat;
+    if (myRank > 0) MPI_Recv(top, SIZE, MPI_DOUBLE, myRank - 1, loop, MPI_COMM_WORLD, &stat);
+    if (myRank < SIZE - 1) MPI_Recv(bottom, SIZE, MPI_DOUBLE, myRank + 1, loop, MPI_COMM_WORLD, &stat);
+}
+
+int sendFinal(double **arr, int height, int myRank, int loop)
+{
+    MPI_Request topReq;
+    MPI_Request bottomReq;
+    MPI_Request notificationReq;
+
+    if (myRank > 0) MPI_Isend(arr[0], SIZE, MPI_DOUBLE, myRank - 1, loop, MPI_COMM_WORLD, &topReq);
+    if (myRank < SIZE - 1) MPI_Isend(arr[height - 1], SIZE, MPI_DOUBLE, myRank + 1, loop, MPI_COMM_WORLD, &bottomReq);
+    MPI_Isend((int*)0, 1, MPI_INT, 0, 0, MPI_COMM_WORLD, &notificationReq);
+
+    MPI_Request reqs[height];
+
+    for (int i = 0; i < height; i++) {
+        MPI_Isend(arr[i], SIZE, MPI_DOUBLE, 0, loop, MPI_COMM_WORLD, &reqs[i]);
+    }
+
+    int *cont = (int*) malloc(sizeof(int));
+
+    MPI_Bcast(cont, 1, MPI_INT, 0, MPI_COMM_WORLD);
+
+    int ret = cont[0];
+    free(cont);
+
+    if (ret) {
+        for (int i = 0; i < height; i++) {
+            MPI_Cancel(&reqs[i]);
+            MPI_Request_free(&reqs[i]);
+        }
+    }
+
+    MPI_Status stat;
+    MPI_Wait(&topReq, &stat);
+
+    MPI_Status stat;
+    MPI_Wait(&bottomReq, &stat);
+
+    return ret;
+}
+
+int receiveFinal(double *line, int myRank, int nproc)
+{
+    int *cont = (int*) malloc(sizeof(int));
+
+    if (myRank == 0) {
+        cont[0] = 0;
+        for (int i = 1; i < nproc; i++) {
+            int *j = (int*) malloc(sizeof(int));
+            MPI_Status stat;
+            MPI_Recv(j, 1, MPI_INT, i, 0, MPI_COMM_WORLD, &stat);
+            if (j[0] == 1) {
+                cont[0] = 1;
+                free(j);
+                break;
+            }
+            free(j);
+        }
+    }
+
+    MPI_Bcast(cont, 1, MPI_INT, 0, MPI_COMM_WORLD);
+
+    int ret = cont[0];
+    free(cont);
+
+    return ret;
+}
+
+double **getFinalArray(double *line, int nproc, int myRank, int loop)
+{
+    if (myRank != 0) return NULL;
+
+    for (int i = 1; i < nproc; i++) {
+        double **j = createArray(SIZE, SIZE);
+        MPI_Status stat;
+        MPI_Recv(j, 1, MPI_DOUBLE, i, loop, MPI_COMM_WORLD, &stat);
+        if (j[0] == 1) {
+            cont[0] = 1;
+            free(j);
+            break;
+        }
+        free(j);
+    }
+}
+
 int main(int argc, char **argv)
 {
     int rc, myrank, nproc;
@@ -81,12 +210,20 @@ int main(int argc, char **argv)
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
     MPI_Comm_size(MPI_COMM_WORLD, &nproc);
 
+    // Can try to improve later to add per cell rather than per line
     // How to deal with border?
-    unsigned long long startCell = (SIZE * SIZE / (unsigned long long) nproc) * myrank;
+    int round = (int)SIZE % nproc;
+
+    int startRow = ((int)SIZE / nproc);
+    if (round) startRow++;
+    startRow = startRow * myrank;
+
     if (myrank == (nproc - 1)) {
-        unsigned long long endCell = SIZE + 1;
+        int endRow = (int)SIZE + 1;
     } else {
-        unsigned long long endCell = (SIZE * SIZE / (unsigned long long) nproc) * (myrank + 1);
+        int endRow = ((int)SIZE / nproc);
+        if (round) endRow++;
+        endRow = endRow  * (myrank + 1);
     }
 
     // Instead of the following could look at using the old cell code with calc x and y
@@ -98,6 +235,16 @@ int main(int argc, char **argv)
     // take right value
     // else if y index % SIZE == (SIZE - 1) then
     // take bottom value
+
+    // if significant change then
+    //   sendResults(); - Should also signal to continue
+    //   receiveResults();
+    //   ensure sendResults() has finished then next loop
+    // else
+    //   sendFinal(); - This sends to 0 and its partner like sendResults does
+    //   receiveFinal();
+    //   if receiveFinal == 1 then
+    //     wait for sendFinal(); to finish then next loop
 
     MPI_Finalize();
     return 0;
