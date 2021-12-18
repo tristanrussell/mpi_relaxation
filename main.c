@@ -71,7 +71,7 @@ void processArgs(int argc, char *argv[]) {
 
 int main(int argc, char **argv)
 {
-    int rc, myrank, nproc, namelen;
+    int rc, myrank, nproc;
     char name[MPI_MAX_PROCESSOR_NAME];
     rc = MPI_Init(&argc, &argv);
     if (rc != MPI_SUCCESS) {
@@ -81,12 +81,24 @@ int main(int argc, char **argv)
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
     MPI_Comm_size(MPI_COMM_WORLD, &nproc);
 
-    if (myrank == 0) {
-        printf("main reports %d procs\n", nproc);
+    // How to deal with border?
+    unsigned long long startCell = (SIZE * SIZE / (unsigned long long) nproc) * myrank;
+    if (myrank == (nproc - 1)) {
+        unsigned long long endCell = SIZE + 1;
+    } else {
+        unsigned long long endCell = (SIZE * SIZE / (unsigned long long) nproc) * (myrank + 1);
     }
-    namelen = MPI_MAX_PROCESSOR_NAME;
-    MPI_Get_processor_name(name, &namelen);
-    printf("hello world %d from ’%s’\n", myrank, name);
+
+    // Instead of the following could look at using the old cell code with calc x and y
+    // If y index == 0 then
+    // take top value
+    // else if x index % SIZE == 0 (this is same as == 0) then
+    // take left value
+    // else if x index % SIZE == (SIZE - 1) then
+    // take right value
+    // else if y index % SIZE == (SIZE - 1) then
+    // take bottom value
+
     MPI_Finalize();
     return 0;
 }
