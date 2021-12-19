@@ -5,7 +5,7 @@
 #include <math.h>
 
 // The size of the array to compute (excluding edges)
-unsigned long long int SIZE = 50;
+int SIZE = 50;
 // The accuracy to compute the array to
 double ACCURACY = 0.01;
 
@@ -70,7 +70,7 @@ void processArgs(int argc, char *argv[]) {
                 val[j - 3] = argv[i][j];
             }
             val[len - 3] = '\0';
-            SIZE = (unsigned long long int) strtoll(val, (char **)NULL, 10);
+            SIZE = (int) strtoll(val, (char **)NULL, 10);
         }
         if (len > 6 && strncmp(argv[i], sizeStr, 6) == 0) {
             char val[len - 5];
@@ -78,7 +78,7 @@ void processArgs(int argc, char *argv[]) {
                 val[j - 6] = argv[i][j];
             }
             val[len - 6] = '\0';
-            SIZE = (unsigned long long int) strtoll(val, (char **)NULL, 10);
+            SIZE = (int) strtoll(val, (char **)NULL, 10);
         }
         if (len > 3 && strncmp(argv[i], aStr, 3) == 0) {
             char val[len - 2];
@@ -98,10 +98,10 @@ void processArgs(int argc, char *argv[]) {
         }
     }
 
-    printf("Size:%d,Accuracy:%f\n", (int) (SIZE + 2), ACCURACY);
+    printf("Size:%d,Accuracy:%f\n", SIZE, ACCURACY);
 }
 
-int calculate(double **in, double **out, int height, int width)
+int calculate(double **in, double **out, int height, int width, double accuracy)
 {
     int changed = 0;
     out[0] = in[0];
@@ -116,7 +116,7 @@ int calculate(double **in, double **out, int height, int width)
             val += in[i][j + 1];
             out[i][j] = val;
 
-            if (!changed && fabs(val - in[i][j]) > ACCURACY) changed = 1;
+            if (!changed && (fabs(val - in[i][j]) > accuracy)) changed = 1;
         }
     }
     return changed;
@@ -185,35 +185,40 @@ int sendAndReceive(double **arr, int height, int myRank, int nproc, int loop, in
 {
     MPI_Request topReq;
     MPI_Request bottomReq;
-    MPI_Request notificationReq;
+
+    int cont[1];
+    cont[0] = changed;
 
     if (myRank > 0) {
-        MPI_Isend(&changed, 1, MPI_INT, 0, 0, MPI_COMM_WORLD, &notificationReq);
+        MPI_Send(cont, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
         MPI_Isend(arr[1], SIZE, MPI_DOUBLE, myRank - 1, loop, MPI_COMM_WORLD, &topReq);
     }
     if (myRank < nproc - 1) MPI_Isend(arr[height - 2], SIZE, MPI_DOUBLE, myRank + 1, loop, MPI_COMM_WORLD, &bottomReq);
 
-    int *cont = (int*) malloc(sizeof(int));
-
     if (myRank == 0) {
-        cont[0] = changed;
         for (int i = 1; i < nproc; i++) {
-            int *j = (int*) malloc(sizeof(int));
+            int j[1];
             MPI_Status stat;
             MPI_Recv(j, 1, MPI_INT, i, 0, MPI_COMM_WORLD, &stat);
             if (j[0] == 1) {
                 cont[0] = 1;
             }
-            free(j);
         }
     }
 
     MPI_Bcast(cont, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
     int resp = cont[0];
-    free(cont);
 
-    if (!resp) {
+    if (resp) {
+        MPI_Status stat;
+        if (myRank > 0) MPI_Recv(arr[0], SIZE, MPI_DOUBLE, myRank - 1, loop, MPI_COMM_WORLD, &stat);
+        if (myRank < nproc - 1) MPI_Recv(arr[height - 1], SIZE, MPI_DOUBLE, myRank + 1, loop, MPI_COMM_WORLD, &stat);
+
+        if (myRank > 0) MPI_Wait(&topReq, &stat);
+        if (myRank < nproc - 1) MPI_Wait(&bottomReq, &stat);
+        return 1;
+    } else {
         for (int i = 1; i < height - 1; i++) {
             MPI_Send(arr[i], SIZE, MPI_DOUBLE, 0, loop, MPI_COMM_WORLD);
         }
@@ -222,15 +227,6 @@ int sendAndReceive(double **arr, int height, int myRank, int nproc, int loop, in
         }
         return 0;
     }
-
-    MPI_Status stat;
-    if (myRank > 0) MPI_Recv(arr[0], SIZE, MPI_DOUBLE, myRank - 1, loop, MPI_COMM_WORLD, &stat);
-    if (myRank < nproc - 1) MPI_Recv(arr[height - 1], SIZE, MPI_DOUBLE, myRank + 1, loop, MPI_COMM_WORLD, &stat);
-
-    if (myRank > 0) MPI_Wait(&topReq, &stat);
-    if (myRank < nproc - 1) MPI_Wait(&bottomReq, &stat);
-
-    return resp;
 }
 
 //int checkFinal(double *line, int changed, int myRank, int nproc)
@@ -260,7 +256,7 @@ double **getFinalArray(double **arr, int height, int nproc, int myRank, int loop
 {
     if (myRank != 0) return NULL;
 
-    double **j = createArray((int)SIZE, (int)SIZE);
+    double **j = createArray(SIZE, SIZE);
 
     for (int i = 0; i < height - 1; i++) {
         free(j[i]);
@@ -268,16 +264,16 @@ double **getFinalArray(double **arr, int height, int nproc, int myRank, int loop
     }
 
     for (int i = 1; i < nproc; i++) {
-        int startRow = ((int)SIZE / nproc);
-        if ((int)SIZE % nproc) startRow++;
+        int startRow = (SIZE / nproc);
+        if (SIZE % nproc) startRow++;
         startRow = startRow * i;
 
         int endRow;
         if (i == (nproc - 1)) {
-            endRow = (int)SIZE + 1;
+            endRow = SIZE + 1;
         } else {
-            endRow = ((int)SIZE / nproc);
-            if ((int)SIZE % nproc) endRow++;
+            endRow = (SIZE / nproc);
+            if (SIZE % nproc) endRow++;
             endRow = endRow  * (i + 1);
         }
 
@@ -306,24 +302,39 @@ int main(int argc, char **argv)
 
     processArgs(argc, argv);
 
+    int length = SIZE;
+    double accuracy = ACCURACY;
+
+    int lineCount = (length - 2) / nproc;
+    int rowsCovered = lineCount * nproc;
+    int rowsLeft = (length - 2) - rowsCovered;
+
+    int height = lineCount + 2;
+    if (myrank < rowsLeft) height++;
+
     // Can try to improve later to add per cell rather than per line
     // How to deal with border?
-    int round = (int)SIZE % nproc;
-
-    int startRow = ((int)SIZE / nproc);
-    if (round) startRow++;
-    startRow = startRow * myrank;
-
-    int endRow;
-    if (myrank == (nproc - 1)) {
-        endRow = (int)SIZE + 1;
-    } else {
-        endRow = ((int)SIZE / nproc);
-        if (round) endRow++;
-        endRow = endRow  * (myrank + 1);
-    }
-
-    int height = endRow - startRow + 2;
+//    int round = SIZE % nproc;
+//
+//    int startRow;
+//    if (myrank == 0) {
+//        startRow = 1;
+//    } else {
+//        startRow = (SIZE / nproc);
+//        if (round) startRow++;
+//        startRow = startRow * myrank;
+//    }
+//
+//    int endRow;
+//    if (myrank == (nproc - 1)) {
+//        endRow = SIZE;
+//    } else {
+//        endRow = (SIZE / nproc);
+//        if (round) endRow++;
+//        endRow = endRow  * (myrank + 1);
+//    }
+//
+//    int height = endRow - startRow + 2;
 
     // Arrays for each process will store top, left, right, bottom and the internal values
 
@@ -337,8 +348,8 @@ int main(int argc, char **argv)
     // else if y index % SIZE == (SIZE - 1) then
     // take bottom value
 
-    double **in = createArray(height, (int)SIZE);
-    double **out = createArray(height, (int)SIZE);
+    double **in = createArray(height, SIZE);
+    double **out = createArray(height, SIZE);
 
     if (myrank == 0) {
         for (int i = 0; i < SIZE; i++) {
@@ -376,13 +387,13 @@ int main(int argc, char **argv)
     int loop = 0;
     while (changed) {
         loop++;
-        changed = calculate(in, out, height, SIZE);
-        changed = sendAndReceive(out, height, myrank, nproc, loop,changed);
+        changed = calculate(in, out, height, SIZE, accuracy);
+        changed = sendAndReceive(out, height, myrank, nproc, loop, changed);
     }
 
     double **final;
     if (myrank == 0) {
-        final = getFinalArray(out, height, nproc, myrank, loop);
+//        final = getFinalArray(out, height, nproc, myrank, loop);
         // Do stuff with final array
         freeArray(final, SIZE);
         freeArray(in + 1, height - 2);
