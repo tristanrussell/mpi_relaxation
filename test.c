@@ -208,9 +208,7 @@ int sendAndReceive(double **arr, int height, int myRank, int nproc, int loop, in
 
     MPI_Bcast(cont, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
-    int resp = cont[0];
-
-    if (resp) {
+    if (cont[0]) {
         MPI_Status stat;
         if (myRank > 0) MPI_Recv(arr[0], SIZE, MPI_DOUBLE, myRank - 1, loop, MPI_COMM_WORLD, &stat);
         if (myRank < nproc - 1) MPI_Recv(arr[height - 1], SIZE, MPI_DOUBLE, myRank + 1, loop, MPI_COMM_WORLD, &stat);
@@ -385,17 +383,19 @@ int main(int argc, char **argv)
 
     int changed = 1;
     int loop = 0;
-    loop++;
-    changed = calculate(in, out, height, SIZE, accuracy);
-    changed = sendAndReceive(out, height, myrank, nproc, loop, changed);
-//    while (changed) {
-//    }
+    while (changed) {
+        loop++;
+        changed = calculate(in, out, height, SIZE, accuracy);
+        changed = sendAndReceive(out, height, myrank, nproc, loop, changed);
+        if (myrank == 0) printf("Loop %d succeeded on %d", loop, myrank);
+    }
 
     double **final;
     if (myrank == 0) {
 //        final = getFinalArray(out, height, nproc, myrank, loop);
         // Do stuff with final array
-        freeArray(final, SIZE);
+//        freeArray(final, SIZE);
+        freeArray(out, height);
         freeArray(in + 1, height - 2);
     } else {
         freeArray(in, height);
