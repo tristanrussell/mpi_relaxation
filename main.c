@@ -124,62 +124,62 @@ int calculate(double **in, double **out, int height, int width)
 
 // Sends a line of results to the next process, dir determines the direction,
 // 0 is up, 1 is down
-void sendResults(double **arr, int height, int myRank, int nproc, int loop)
-{
-    MPI_Request topReq;
-    MPI_Request bottomReq;
-    MPI_Request notificationReq;
+//void sendResults(double **arr, int height, int myRank, int nproc, int loop)
+//{
+//    MPI_Request topReq;
+//    MPI_Request bottomReq;
+//    MPI_Request notificationReq;
+//
+//    if (myRank > 0) MPI_Isend(arr[1], SIZE, MPI_DOUBLE, myRank - 1, loop, MPI_COMM_WORLD, &topReq);
+//    if (myRank < nproc - 1) MPI_Isend(arr[height - 2], SIZE, MPI_DOUBLE, myRank + 1, loop, MPI_COMM_WORLD, &bottomReq);
+//
+//    MPI_Status stat;
+//    if (myRank > 0) MPI_Recv(arr[0], SIZE, MPI_DOUBLE, myRank - 1, loop, MPI_COMM_WORLD, &stat);
+//    if (myRank < nproc - 1) MPI_Recv(arr[height - 1], SIZE, MPI_DOUBLE, myRank + 1, loop, MPI_COMM_WORLD, &stat);
+//}
 
-    if (myRank > 0) MPI_Isend(arr[1], SIZE, MPI_DOUBLE, myRank - 1, loop, MPI_COMM_WORLD, &topReq);
-    if (myRank < nproc - 1) MPI_Isend(arr[height - 2], SIZE, MPI_DOUBLE, myRank + 1, loop, MPI_COMM_WORLD, &bottomReq);
-
-    MPI_Status stat;
-    if (myRank > 0) MPI_Recv(arr[0], SIZE, MPI_DOUBLE, myRank - 1, loop, MPI_COMM_WORLD, &stat);
-    if (myRank < nproc - 1) MPI_Recv(arr[height - 1], SIZE, MPI_DOUBLE, myRank + 1, loop, MPI_COMM_WORLD, &stat);
-}
-
-int sendFinal(double **arr, int height, int myRank, int nproc, int loop, int changed)
-{
-    if (myRank <= 0) return -1;
-
-    MPI_Request topReq;
-    MPI_Request bottomReq;
-    MPI_Request notificationReq;
-
-    MPI_Isend(arr[1], SIZE, MPI_DOUBLE, myRank - 1, loop, MPI_COMM_WORLD, &topReq);
-    if (myRank < nproc - 1) MPI_Isend(arr[height - 2], SIZE, MPI_DOUBLE, myRank + 1, loop, MPI_COMM_WORLD, &bottomReq);
-    MPI_Isend(&changed, 1, MPI_INT, 0, 0, MPI_COMM_WORLD, &notificationReq);
-
-    MPI_Request reqs[height - 2];
-
-    for (int i = 1; i < height - 1; i++) {
-        MPI_Isend(arr[i], SIZE, MPI_DOUBLE, 0, loop, MPI_COMM_WORLD, &reqs[i - 1]);
-    }
-
-    int *cont = (int*) malloc(sizeof(int));
-
-    MPI_Bcast(cont, 1, MPI_INT, 0, MPI_COMM_WORLD);
-
-    int ret = cont[0];
-    free(cont);
-
-    if (ret) {
-        for (int i = 1; i < height - 1; i++) {
-            MPI_Cancel(&reqs[i - 1]);
-            MPI_Request_free(&reqs[i - 1]);
-        }
-    }
-
-    MPI_Status stat;
-    MPI_Wait(&topReq, &stat);
-
-    if (myRank < SIZE - 1) {
-        MPI_Status stat;
-        MPI_Wait(&bottomReq, &stat);
-    }
-
-    return ret;
-}
+//int sendFinal(double **arr, int height, int myRank, int nproc, int loop, int changed)
+//{
+//    if (myRank <= 0) return -1;
+//
+//    MPI_Request topReq;
+//    MPI_Request bottomReq;
+//    MPI_Request notificationReq;
+//
+//    MPI_Isend(arr[1], SIZE, MPI_DOUBLE, myRank - 1, loop, MPI_COMM_WORLD, &topReq);
+//    if (myRank < nproc - 1) MPI_Isend(arr[height - 2], SIZE, MPI_DOUBLE, myRank + 1, loop, MPI_COMM_WORLD, &bottomReq);
+//    MPI_Isend(&changed, 1, MPI_INT, 0, 0, MPI_COMM_WORLD, &notificationReq);
+//
+//    MPI_Request reqs[height - 2];
+//
+//    for (int i = 1; i < height - 1; i++) {
+//        MPI_Isend(arr[i], SIZE, MPI_DOUBLE, 0, loop, MPI_COMM_WORLD, &reqs[i - 1]);
+//    }
+//
+//    int *cont = (int*) malloc(sizeof(int));
+//
+//    MPI_Bcast(cont, 1, MPI_INT, 0, MPI_COMM_WORLD);
+//
+//    int ret = cont[0];
+//    free(cont);
+//
+//    if (ret) {
+//        for (int i = 1; i < height - 1; i++) {
+//            MPI_Cancel(&reqs[i - 1]);
+//            MPI_Request_free(&reqs[i - 1]);
+//        }
+//    }
+//
+//    MPI_Status stat;
+//    MPI_Wait(&topReq, &stat);
+//
+//    if (myRank < SIZE - 1) {
+//        MPI_Status stat;
+//        MPI_Wait(&bottomReq, &stat);
+//    }
+//
+//    return ret;
+//}
 
 int sendAndReceive(double **arr, int height, int myRank, int nproc, int loop, int changed)
 {
@@ -230,31 +230,31 @@ int sendAndReceive(double **arr, int height, int myRank, int nproc, int loop, in
     if (myRank > 0) MPI_Wait(&topReq, &stat);
     if (myRank < nproc - 1) MPI_Wait(&bottomReq, &stat);
 
-    return ret;
+    return resp;
 }
 
-int checkFinal(double *line, int changed, int myRank, int nproc)
-{
-    int *cont = (int*) malloc(sizeof(int));
-
-    cont[0] = changed;
-    for (int i = 1; i < nproc; i++) {
-        int *j = (int*) malloc(sizeof(int));
-        MPI_Status stat;
-        MPI_Recv(j, 1, MPI_INT, i, 0, MPI_COMM_WORLD, &stat);
-        if (j[0] == 1) {
-            cont[0] = 1;
-        }
-        free(j);
-    }
-
-    MPI_Bcast(cont, 1, MPI_INT, 0, MPI_COMM_WORLD);
-
-    int ret = cont[0];
-    free(cont);
-
-    return ret;
-}
+//int checkFinal(double *line, int changed, int myRank, int nproc)
+//{
+//    int *cont = (int*) malloc(sizeof(int));
+//
+//    cont[0] = changed;
+//    for (int i = 1; i < nproc; i++) {
+//        int *j = (int*) malloc(sizeof(int));
+//        MPI_Status stat;
+//        MPI_Recv(j, 1, MPI_INT, i, 0, MPI_COMM_WORLD, &stat);
+//        if (j[0] == 1) {
+//            cont[0] = 1;
+//        }
+//        free(j);
+//    }
+//
+//    MPI_Bcast(cont, 1, MPI_INT, 0, MPI_COMM_WORLD);
+//
+//    int ret = cont[0];
+//    free(cont);
+//
+//    return ret;
+//}
 
 double **getFinalArray(double **arr, int height, int nproc, int myRank, int loop)
 {
@@ -304,6 +304,8 @@ int main(int argc, char **argv)
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
     MPI_Comm_size(MPI_COMM_WORLD, &nproc);
 
+    processArgs(argc, argv);
+
     // Can try to improve later to add per cell rather than per line
     // How to deal with border?
     int round = (int)SIZE % nproc;
@@ -338,7 +340,37 @@ int main(int argc, char **argv)
     double **in = createArray(height, (int)SIZE);
     double **out = createArray(height, (int)SIZE);
 
-    // Sort initial array here
+    if (myrank == 0) {
+        for (int i = 0; i < SIZE; i++) {
+            in[0][i] = 1.0;
+        }
+        for (int i = 1; i < height; i++) {
+            in[i][0] = 1.0;
+            in[i][SIZE - 1] = 1.0;
+            for (int j = 1; j < SIZE - 1; j++) {
+                in[i][j] = 0.0;
+            }
+        }
+    } else if (myrank == nproc - 1) {
+        for (int i = 0; i < SIZE; i++) {
+            in[height - 1][i] = 1.0;
+        }
+        for (int i = 0; i < height - 1; i++) {
+            in[i][0] = 1.0;
+            in[i][SIZE - 1] = 1.0;
+            for (int j = 1; j < SIZE - 1; j++) {
+                in[i][j] = 0.0;
+            }
+        }
+    } else {
+        for (int i = 0; i < height - 1; i++) {
+            in[i][0] = 1.0;
+            in[i][SIZE - 1] = 1.0;
+            for (int j = 1; j < SIZE - 1; j++) {
+                in[i][j] = 0.0;
+            }
+        }
+    }
 
     int changed = 1;
     int loop = 0;
