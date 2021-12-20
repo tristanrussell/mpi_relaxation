@@ -1,43 +1,25 @@
 #include <stdio.h>
-#include <string.h>
-#include <mpi.h>
 #include <stdlib.h>
+#include <string.h>
 #include <math.h>
-
-// The size of the array to compute (excluding edges)
-int SIZE = 50;
-// The accuracy to compute the array to
-double ACCURACY = 0.01;
-
-void printArray(double **arr, int height, int width)
-{
-    for (int i = 0; i < height; i++) {
-        for (int j = 0; j < width; j++) {
-            printf("%1.2f,", arr[i][j]);
-        }
-        printf("\n");
-    }
-}
+#include <mpi.h>
 
 /**
- * Free's the memory of the given 2 dimensional array. This free's both the
- * sub-arrays and the outer array.
- *
- * @param a : The 2 dimensional array to free.
+ * The structure used for carrying the program arguments back to the main
+ * function. This avoids the use of global variables.
  */
-void freeArray(double **a, int height) {
-    for (int i = 0; i < height; i++) {
-        free(a[i]);
-    }
-    free(a);
-}
+typedef struct arguments {
+    int size;
+    double accuracy;
+} ARGUMENTS;
 
 /**
  * Builds a 2d array of zeros.
  *
  * @return : The 2d array of zeros.
  */
-double **createArray(int height, int width) {
+double **createArray(int height, int width)
+{
     double **arr = (double**)malloc((unsigned long)height * sizeof(double*));
     for (int i = 0; i < height; i++) {
         arr[i] = (double*)calloc(width, sizeof(double));
@@ -51,19 +33,43 @@ double **createArray(int height, int width) {
 }
 
 /**
+ * Prints out an array of values to the console.
+ *
+ * @param arr : The array to print.
+ * @param height : The height of the array.
+ * @param width : The width of the array.
+ */
+void printArray(double **arr, int height, int width)
+{
+    for (int i = 0; i < height; i++) {
+        for (int j = 0; j < width; j++) {
+            printf("%1.2f,", arr[i][j]);
+        }
+        printf("\n");
+    }
+}
+
+/**
  * Takes the input arguments and set the global variables appropriately.
  *
  * The available command line arguments are:
  *      -size (or -s)     : The size of the array to compute e.g. -s=1000 would
  *                          be a 1000 x 1000 array.
- *      -accuracy (or -a) : The accuracy the array must reach.]
+ *      -accuracy (or -a) : The accuracy the array must reach.
  *
  * E.g. ./main -s=1000 -t=10 -a=0.001
  *
  * @param argc : The argc value for the program.
  * @param argv : The argv value for the program.
+ * @return : The arguments in an ARGUMENT structure.
  */
-void processArgs(int argc, char *argv[], int myrank) {
+ARGUMENTS *processArgs(int argc, char *argv[]) {
+    ARGUMENTS *ar = (ARGUMENTS*)malloc(sizeof(ARGUMENTS));
+
+    // Set defaults
+    ar->size = 500;
+    ar->accuracy = 0.01;
+
     char *sizeStr = "-size=";
     char *sStr = "-s=";
     char *accStr = "-accuracy=";
@@ -76,7 +82,7 @@ void processArgs(int argc, char *argv[], int myrank) {
                 val[j - 3] = argv[i][j];
             }
             val[len - 3] = '\0';
-            SIZE = (int) strtoll(val, (char **)NULL, 10);
+            ar->size = (int) strtoll(val, (char **)NULL, 10);
         }
         if (len > 6 && strncmp(argv[i], sizeStr, 6) == 0) {
             char val[len - 5];
@@ -84,7 +90,7 @@ void processArgs(int argc, char *argv[], int myrank) {
                 val[j - 6] = argv[i][j];
             }
             val[len - 6] = '\0';
-            SIZE = (int) strtoll(val, (char **)NULL, 10);
+            ar->size = (int) strtoll(val, (char **)NULL, 10);
         }
         if (len > 3 && strncmp(argv[i], aStr, 3) == 0) {
             char val[len - 2];
@@ -92,7 +98,7 @@ void processArgs(int argc, char *argv[], int myrank) {
                 val[j - 3] = argv[i][j];
             }
             val[len - 3] = '\0';
-            ACCURACY = strtod(val, (char**)NULL);
+            ar->accuracy = strtod(val, (char**)NULL);
         }
         if (len > 10 && strncmp(argv[i], accStr, 10) == 0) {
             char val[len - 9];
@@ -100,18 +106,26 @@ void processArgs(int argc, char *argv[], int myrank) {
                 val[j - 10] = argv[i][j];
             }
             val[len - 10] = '\0';
-            ACCURACY = strtod(val, (char**)NULL);
+            ar->accuracy = strtod(val, (char**)NULL);
         }
     }
 
-    if (myrank == 0) printf("Size:%d,Accuracy:%f\n", SIZE, ACCURACY);
+    return ar;
 }
 
+/**
+ * Calculates the values for the current iteration from the input array.
+ *
+ * @param in : The input array.
+ * @param out : The output array.
+ * @param height : The height of the input and output arrays.
+ * @param width : The width of the input and output arrays.
+ * @param accuracy : The accuracy to work to.
+ * @return : Whether any values changed by more than the accuracy.
+ */
 int calculate(double **in, double **out, int height, int width, double accuracy)
 {
     int changed = 0;
-    out[0] = in[0];
-    out[height - 1] = in[height - 1];
     for (int i = 1; i < height - 1; i++) {
         out[i][0] = in[i][0];
         out[i][width - 1] = in[i][width - 1];
@@ -129,170 +143,80 @@ int calculate(double **in, double **out, int height, int width, double accuracy)
     return changed;
 }
 
-// Sends a line of results to the next process, dir determines the direction,
-// 0 is up, 1 is down
-//void sendResults(double **arr, int height, int myRank, int nproc, int loop)
-//{
-//    MPI_Request topReq;
-//    MPI_Request bottomReq;
-//    MPI_Request notificationReq;
-//
-//    if (myRank > 0) MPI_Isend(arr[1], SIZE, MPI_DOUBLE, myRank - 1, loop, MPI_COMM_WORLD, &topReq);
-//    if (myRank < nproc - 1) MPI_Isend(arr[height - 2], SIZE, MPI_DOUBLE, myRank + 1, loop, MPI_COMM_WORLD, &bottomReq);
-//
-//    MPI_Status stat;
-//    if (myRank > 0) MPI_Recv(arr[0], SIZE, MPI_DOUBLE, myRank - 1, loop, MPI_COMM_WORLD, &stat);
-//    if (myRank < nproc - 1) MPI_Recv(arr[height - 1], SIZE, MPI_DOUBLE, myRank + 1, loop, MPI_COMM_WORLD, &stat);
-//}
-
-//int sendFinal(double **arr, int height, int myRank, int nproc, int loop, int changed)
-//{
-//    if (myRank <= 0) return -1;
-//
-//    MPI_Request topReq;
-//    MPI_Request bottomReq;
-//    MPI_Request notificationReq;
-//
-//    MPI_Isend(arr[1], SIZE, MPI_DOUBLE, myRank - 1, loop, MPI_COMM_WORLD, &topReq);
-//    if (myRank < nproc - 1) MPI_Isend(arr[height - 2], SIZE, MPI_DOUBLE, myRank + 1, loop, MPI_COMM_WORLD, &bottomReq);
-//    MPI_Isend(&changed, 1, MPI_INT, 0, 0, MPI_COMM_WORLD, &notificationReq);
-//
-//    MPI_Request reqs[height - 2];
-//
-//    for (int i = 1; i < height - 1; i++) {
-//        MPI_Isend(arr[i], SIZE, MPI_DOUBLE, 0, loop, MPI_COMM_WORLD, &reqs[i - 1]);
-//    }
-//
-//    int *cont = (int*) malloc(sizeof(int));
-//
-//    MPI_Bcast(cont, 1, MPI_INT, 0, MPI_COMM_WORLD);
-//
-//    int ret = cont[0];
-//    free(cont);
-//
-//    if (ret) {
-//        for (int i = 1; i < height - 1; i++) {
-//            MPI_Cancel(&reqs[i - 1]);
-//            MPI_Request_free(&reqs[i - 1]);
-//        }
-//    }
-//
-//    MPI_Status stat;
-//    MPI_Wait(&topReq, &stat);
-//
-//    if (myRank < SIZE - 1) {
-//        MPI_Status stat;
-//        MPI_Wait(&bottomReq, &stat);
-//    }
-//
-//    return ret;
-//}
-
-int sendAndReceive(double **arr, int height, int myRank, int nproc, int loop, int changed)
+/**
+ * Sends the results to the processes that needs the results and retrieves the
+ * results from other processes and replaces the current values the output
+ * array. The messages are divided into 30000 chunks (if greater) because
+ * messages larger than around 31000 would cause the send to fail, so 30000
+ * was chosen to leave a little headroom and as the closest round number.
+ *
+ * @param arr : The output array from the current iteration.
+ * @param height : The height of the input array.
+ * @param width : The width of the input array.
+ * @param myrank : The rank of the current process.
+ * @param nproc : The number of processes.
+ * @param loop : The current iteration loop count.
+ * @return : 0 if successful and 1 otherwise.
+ */
+int sendAndReceiveResults(double **arr, int height, int width, int myrank, int nproc, int loop)
 {
-    MPI_Request topReq;
-    MPI_Request bottomReq;
+//    Original:
+//    if (myrank > 0) MPI_Send(arr[1], width, MPI_DOUBLE, myrank - 1, loop, MPI_COMM_WORLD);
+//    if (myrank < nproc - 1) MPI_Send(arr[height - 2], width, MPI_DOUBLE, myrank + 1, loop, MPI_COMM_WORLD);
+//    MPI_Status upStat;
+//    if (myrank > 0) MPI_Recv(arr[0], width, MPI_DOUBLE, myrank - 1, loop, MPI_COMM_WORLD, &upStat);
+//    MPI_Status downStat;
+//    if (myrank < nproc - 1) MPI_Recv(arr[height - 1], width, MPI_DOUBLE, myrank + 1, loop, MPI_COMM_WORLD, &downStat);
+//    return 0;
 
-    int cont[1];
-    cont[0] = changed;
+    int w = width;
+    int acc = 0;
 
-    if (myRank > 0) {
-        MPI_Send(cont, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
-        MPI_Isend(arr[1], SIZE, MPI_DOUBLE, myRank - 1, loop, MPI_COMM_WORLD, &topReq);
-    }
-    if (myRank < nproc - 1) MPI_Isend(arr[height - 2], SIZE, MPI_DOUBLE, myRank + 1, loop, MPI_COMM_WORLD, &bottomReq);
-
-    if (myRank == 0) {
-        for (int i = 1; i < nproc; i++) {
-            int j[1];
-            MPI_Status stat;
-            MPI_Recv(j, 1, MPI_INT, i, 0, MPI_COMM_WORLD, &stat);
-            if (j[0] == 1) {
-                cont[0] = 1;
-            }
-        }
-    }
-
-    MPI_Bcast(cont, 1, MPI_INT, 0, MPI_COMM_WORLD);
-
-    if (cont[0]) {
-        MPI_Status stat;
-        if (myRank > 0) MPI_Recv(arr[0], SIZE, MPI_DOUBLE, myRank - 1, loop, MPI_COMM_WORLD, &stat);
-        if (myRank < nproc - 1) MPI_Recv(arr[height - 1], SIZE, MPI_DOUBLE, myRank + 1, loop, MPI_COMM_WORLD, &stat);
-
-        if (myRank > 0) MPI_Wait(&topReq, &stat);
-        if (myRank < nproc - 1) MPI_Wait(&bottomReq, &stat);
-        return 1;
-    } else {
-        for (int i = 1; i < height - 1; i++) {
-            MPI_Send(arr[i], SIZE, MPI_DOUBLE, 0, loop, MPI_COMM_WORLD);
-        }
-        if (myRank == nproc - 1) {
-            MPI_Send(arr[height - 1], SIZE, MPI_DOUBLE, 0, loop, MPI_COMM_WORLD);
-        }
-        return 0;
-    }
-}
-
-//int checkFinal(double *line, int changed, int myRank, int nproc)
-//{
-//    int *cont = (int*) malloc(sizeof(int));
-//
-//    cont[0] = changed;
-//    for (int i = 1; i < nproc; i++) {
-//        int *j = (int*) malloc(sizeof(int));
-//        MPI_Status stat;
-//        MPI_Recv(j, 1, MPI_INT, i, 0, MPI_COMM_WORLD, &stat);
-//        if (j[0] == 1) {
-//            cont[0] = 1;
-//        }
-//        free(j);
-//    }
-//
-//    MPI_Bcast(cont, 1, MPI_INT, 0, MPI_COMM_WORLD);
-//
-//    int ret = cont[0];
-//    free(cont);
-//
-//    return ret;
-//}
-
-double **getFinalArray(double **arr, int height, int width, int nproc, int myRank, int loop)
-{
-    if (myRank != 0) return NULL;
-
-    double **j = createArray(SIZE, SIZE);
-
-    for (int i = 0; i < height - 1; i++) {
-        free(j[i]);
-        j[i] = arr[i];
-    }
-
-    for (int i = 1; i < nproc; i++) {
-        int startRow = (width / nproc);
-        if (width % nproc) startRow++;
-        startRow = startRow * i;
-
-        int endRow;
-        if (i == (nproc - 1)) {
-            endRow = width + 1;
+    while (w > 0) {
+        if (w > 30000) {
+            if (myrank > 0) MPI_Send(arr[1] + acc, 30000, MPI_DOUBLE, myrank - 1, loop, MPI_COMM_WORLD);
+            if (myrank < nproc - 1) MPI_Send(arr[height - 2] + acc, 30000, MPI_DOUBLE, myrank + 1, loop, MPI_COMM_WORLD);
+            w -= 30000;
+            acc += 30000;
         } else {
-            endRow = (width / nproc);
-            if (width % nproc) endRow++;
-            endRow = endRow  * (i + 1);
-        }
-
-        int iHeight = endRow - startRow;
-
-        for (int k = startRow; k < endRow; k++) {
-            MPI_Status stat;
-            MPI_Recv(j[startRow], width, MPI_DOUBLE, i, loop, MPI_COMM_WORLD, &stat);
+            if (myrank > 0) MPI_Send(arr[1] + acc, w, MPI_DOUBLE, myrank - 1, loop, MPI_COMM_WORLD);
+            if (myrank < nproc - 1) MPI_Send(arr[height - 2] + acc, w, MPI_DOUBLE, myrank + 1, loop, MPI_COMM_WORLD);
+            w -= w;
         }
     }
 
-    return j;
+    w = width;
+    acc = 0;
+
+    while (w > 0) {
+        if (w > 30000) {
+            MPI_Status upStat;
+            if (myrank > 0) MPI_Recv(arr[0] + acc, 30000, MPI_DOUBLE, myrank - 1, loop, MPI_COMM_WORLD, &upStat);
+            MPI_Status downStat;
+            if (myrank < nproc - 1) MPI_Recv(arr[height - 1] + acc, 30000, MPI_DOUBLE, myrank + 1, loop, MPI_COMM_WORLD, &downStat);
+            w -= 30000;
+            acc += 30000;
+        } else {
+            MPI_Status upStat;
+            if (myrank > 0) MPI_Recv(arr[0] + acc, w, MPI_DOUBLE, myrank - 1, loop, MPI_COMM_WORLD, &upStat);
+            MPI_Status downStat;
+            if (myrank < nproc - 1) MPI_Recv(arr[height - 1] + acc, w, MPI_DOUBLE, myrank + 1, loop, MPI_COMM_WORLD, &downStat);
+            w -= w;
+        }
+    }
+
+    return 0;
 }
 
+/**
+ * This program takes a square array of values and iterates across the array
+ * replacing the cells with the sum of its 4 neighbours. The edge values are
+ * fixed.
+ *
+ * @param argc
+ * @param argv
+ * @return
+ */
 int main(int argc, char **argv)
 {
     int rc, myrank, nproc;
@@ -305,10 +229,14 @@ int main(int argc, char **argv)
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
     MPI_Comm_size(MPI_COMM_WORLD, &nproc);
 
-    processArgs(argc, argv, myrank);
+    ARGUMENTS *ar = processArgs(argc, argv);
 
-    int width = SIZE;
-    double accuracy = ACCURACY;
+    int width = ar->size;
+    double accuracy = ar->accuracy;
+
+    free(ar);
+
+    if (myrank == 0) printf("Size:%d,Accuracy:%f\n", width, accuracy);
 
     int lineCount = (width - 2) / nproc;
     int rowsCovered = lineCount * nproc;
@@ -317,118 +245,76 @@ int main(int argc, char **argv)
     int height = lineCount + 2;
     if (myrank < rowsLeft) height++;
 
-    // Can try to improve later to add per cell rather than per line
-    // How to deal with border?
-//    int round = SIZE % nproc;
-//
-//    int startRow;
-//    if (myrank == 0) {
-//        startRow = 1;
-//    } else {
-//        startRow = (SIZE / nproc);
-//        if (round) startRow++;
-//        startRow = startRow * myrank;
-//    }
-//
-//    int endRow;
-//    if (myrank == (nproc - 1)) {
-//        endRow = SIZE;
-//    } else {
-//        endRow = (SIZE / nproc);
-//        if (round) endRow++;
-//        endRow = endRow  * (myrank + 1);
-//    }
-//
-//    int height = endRow - startRow + 2;
-
-    // Arrays for each process will store top, left, right, bottom and the internal values
-
-    // Instead of the following could look at using the old cell code with calc x and y
-    // If y index == 0 then
-    // take top value
-    // else if x index % SIZE == 0 (this is same as == 0) then
-    // take left value
-    // else if x index % SIZE == (SIZE - 1) then
-    // take right value
-    // else if y index % SIZE == (SIZE - 1) then
-    // take bottom value
-
-    double **in = createArray(height, SIZE);
-    double **out = createArray(height, SIZE);
+    double **in = createArray(height, width);
+    double **out = createArray(height, width);
+    free(out[0]);
+    free(out[height - 1]);
+    out[0] = in[0];
+    out[height - 1] = in[height - 1];
 
     if (myrank == 0) {
-        for (int i = 0; i < SIZE; i++) {
+        for (int i = 0; i < width; i++) {
             in[0][i] = 1.0;
         }
         for (int i = 1; i < height; i++) {
             in[i][0] = 1.0;
-            in[i][SIZE - 1] = 1.0;
-            for (int j = 1; j < SIZE - 1; j++) {
+            in[i][width - 1] = 1.0;
+            for (int j = 1; j < width - 1; j++) {
                 in[i][j] = 0.0;
             }
         }
     } else if (myrank == nproc - 1) {
-        for (int i = 0; i < SIZE; i++) {
+        for (int i = 0; i < width; i++) {
             in[height - 1][i] = 1.0;
         }
         for (int i = 0; i < height - 1; i++) {
             in[i][0] = 1.0;
-            in[i][SIZE - 1] = 1.0;
-            for (int j = 1; j < SIZE - 1; j++) {
+            in[i][width - 1] = 1.0;
+            for (int j = 1; j < width - 1; j++) {
                 in[i][j] = 0.0;
             }
         }
     } else {
-        for (int i = 0; i < height - 1; i++) {
+        for (int i = 0; i < height; i++) {
             in[i][0] = 1.0;
-            in[i][SIZE - 1] = 1.0;
-            for (int j = 1; j < SIZE - 1; j++) {
+            in[i][width - 1] = 1.0;
+            for (int j = 1; j < width - 1; j++) {
                 in[i][j] = 0.0;
             }
         }
     }
 
-    int changed = 1;
+    int cont[1];
+    cont[0] = 1;
+
     int loop = 0;
-    while (changed) {
+    while (cont[0]) {
         loop++;
-        changed = calculate(in, out, height, SIZE, accuracy);
-        changed = sendAndReceive(out, height, myrank, nproc, loop, changed);
+        cont[0] = calculate(in, out, height, width, accuracy);
+        int sendRes = sendAndReceiveResults(out, height, width, myrank, nproc, loop);
+        if (myrank > 0) MPI_Send(cont, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
         double **tmp = out;
         out = in;
         in = tmp;
+        if (myrank == 0) {
+            int tmpVal = cont[0];
+            for (int i = 1; i < nproc; i++) {
+                MPI_Status stat;
+                MPI_Recv(cont, 1, MPI_INT, i, 0, MPI_COMM_WORLD, &stat);
+                if (!tmpVal && cont[0]) tmpVal = 1;
+            }
+            cont[0] = tmpVal;
+        }
+        MPI_Bcast(cont, 1, MPI_INT, 0, MPI_COMM_WORLD);
     }
 
-    if (myrank == 0) {
-        double **final;
-        final = getFinalArray(in, height, width, nproc, myrank, loop);
-        printArray(final, width, width);
-    }
+    if (myrank == 0) printf("Loops: %d\n", loop);
+    printf("Rank: %d, height: %d\n", myrank, height);
 
-//    double **final;
-//    if (myrank == 0) {
-//        final = getFinalArray(out, height, nproc, myrank, loop);
-//        // Do stuff with final array
-//        freeArray(final, height);
-//        freeArray(in + 1, height - 2);
-//    } else {
-//        freeArray(in, height);
-//        freeArray(out + 1, height - 2);
+//    if (myrank < 6) {
+//        printf("Process: %d\n", myrank);
+//        printArray(in, height, width);
 //    }
-//    freeArray(in, height);
-//    freeArray(out + 1, height - 2);
-
-    // if significant change then
-    //   sendResults(); - Should also signal to continue
-    //   receiveResults();
-    //   ensure sendResults() has finished then next loop
-    // else
-    //   sendFinal(); - This sends to 0 and its partner like sendResults does
-    //   receiveFinal();
-    //   if receiveFinal == 1 then
-    //     wait for sendFinal(); to finish then next loop
-
-    // Might not need to actually get the array at end
 
     MPI_Finalize();
     return 0;
