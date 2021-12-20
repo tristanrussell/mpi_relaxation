@@ -103,8 +103,6 @@ ARGUMENTS *processArgs(int argc, char *argv[]) {
 int calculate(double **in, double **out, int height, int width, double accuracy)
 {
     int changed = 0;
-    out[0] = in[0];
-    out[height - 1] = in[height - 1];
     for (int i = 1; i < height - 1; i++) {
         out[i][0] = in[i][0];
         out[i][width - 1] = in[i][width - 1];
@@ -120,6 +118,56 @@ int calculate(double **in, double **out, int height, int width, double accuracy)
         }
     }
     return changed;
+}
+
+int sendAndReceiveResults(double **arr, int height, int width, int myrank, int nproc, int loop)
+{
+//    Original:
+//    if (myrank > 0) MPI_Send(arr[1], width, MPI_DOUBLE, myrank - 1, loop, MPI_COMM_WORLD);
+//    if (myrank < nproc - 1) MPI_Send(arr[height - 2], width, MPI_DOUBLE, myrank + 1, loop, MPI_COMM_WORLD);
+//    MPI_Status upStat;
+//    if (myrank > 0) MPI_Recv(arr[0], width, MPI_DOUBLE, myrank - 1, loop, MPI_COMM_WORLD, &upStat);
+//    MPI_Status downStat;
+//    if (myrank < nproc - 1) MPI_Recv(arr[height - 1], width, MPI_DOUBLE, myrank + 1, loop, MPI_COMM_WORLD, &downStat);
+//    return 0;
+
+    int w = width;
+    int acc = 0;
+
+    while (w > 0) {
+        if (w > 30000) {
+            if (myrank > 0) MPI_Send(arr[1] + acc, 30000, MPI_DOUBLE, myrank - 1, loop, MPI_COMM_WORLD);
+            if (myrank < nproc - 1) MPI_Send(arr[height - 2] + acc, 30000, MPI_DOUBLE, myrank + 1, loop, MPI_COMM_WORLD);
+            w -= 30000;
+            acc += 30000;
+        } else {
+            if (myrank > 0) MPI_Send(arr[1] + acc, w, MPI_DOUBLE, myrank - 1, loop, MPI_COMM_WORLD);
+            if (myrank < nproc - 1) MPI_Send(arr[height - 2] + acc, w, MPI_DOUBLE, myrank + 1, loop, MPI_COMM_WORLD);
+            w -= w;
+        }
+    }
+
+    w = width;
+    acc = 0;
+
+    while (w > 0) {
+        if (w > 30000) {
+            MPI_Status upStat;
+            if (myrank > 0) MPI_Recv(arr[0] + acc, 30000, MPI_DOUBLE, myrank - 1, loop, MPI_COMM_WORLD, &upStat);
+            MPI_Status downStat;
+            if (myrank < nproc - 1) MPI_Recv(arr[height - 1] + acc, 30000, MPI_DOUBLE, myrank + 1, loop, MPI_COMM_WORLD, &downStat);
+            w -= 30000;
+            acc += 30000;
+        } else {
+            MPI_Status upStat;
+            if (myrank > 0) MPI_Recv(arr[0] + acc, w, MPI_DOUBLE, myrank - 1, loop, MPI_COMM_WORLD, &upStat);
+            MPI_Status downStat;
+            if (myrank < nproc - 1) MPI_Recv(arr[height - 1] + acc, w, MPI_DOUBLE, myrank + 1, loop, MPI_COMM_WORLD, &downStat);
+            w -= w;
+        }
+    }
+
+    return 0;
 }
 
 int main(int argc, char **argv)
@@ -150,6 +198,10 @@ int main(int argc, char **argv)
 
     double **in = createArray(height, width);
     double **out = createArray(height, width);
+    free(out[0]);
+    free(out[height - 1]);
+    out[0] = in[0];
+    out[height - 1] = in[height - 1];
 
     if (myrank == 0) {
         for (int i = 0; i < width; i++) {
@@ -183,8 +235,6 @@ int main(int argc, char **argv)
         }
     }
 
-    calculate(in, out, height, width, accuracy);
-
     int cont[1];
     cont[0] = 1;
 
@@ -192,12 +242,7 @@ int main(int argc, char **argv)
     while (cont[0]) {
         loop++;
         cont[0] = calculate(in, out, height, width, accuracy);
-        if (myrank > 0) MPI_Send(out[1], width, MPI_DOUBLE, myrank - 1, loop, MPI_COMM_WORLD);
-        if (myrank < nproc - 1) MPI_Send(out[height - 2], width, MPI_DOUBLE, myrank + 1, loop, MPI_COMM_WORLD);
-        MPI_Status upStat;
-        if (myrank > 0) MPI_Recv(out[0], width, MPI_DOUBLE, myrank - 1, loop, MPI_COMM_WORLD, &upStat);
-        MPI_Status downStat;
-        if (myrank < nproc - 1) MPI_Recv(out[height - 1], width, MPI_DOUBLE, myrank + 1, loop, MPI_COMM_WORLD, &downStat);
+        int sendRes = sendAndReceiveResults(out, height, width, myrank, nproc, loop);
         if (myrank > 0) MPI_Send(cont, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
         double **tmp = out;
         out = in;
