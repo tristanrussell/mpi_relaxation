@@ -56,11 +56,7 @@ double **createArray(int height, int width) {
  * The available command line arguments are:
  *      -size (or -s)     : The size of the array to compute e.g. -s=1000 would
  *                          be a 1000 x 1000 array.
- *      -threads (or -t)  : The number of threads to use for the computation.
- *      -accuracy (or -a) : The accuracy the array must reach.
- *      -barriers (or -b) : Turns on the use of barriers.
- *      -start            : TThe number of threads to start with.
- *      -end              : TThe number of threads to end with.
+ *      -accuracy (or -a) : The accuracy the array must reach.]
  *
  * E.g. ./main -s=1000 -t=10 -a=0.001
  *

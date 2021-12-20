@@ -1,7 +1,13 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <math.h>
 #include <mpi.h>
+
+typedef struct arguments {
+    int size;
+    double accuracy;
+} ARGUMENTS;
 
 /**
  * Builds a 2d array of zeros.
@@ -30,6 +36,68 @@ void printArray(double **arr, int height, int width)
         }
         printf("\n");
     }
+}
+
+/**
+ * Takes the input arguments and set the global variables appropriately.
+ *
+ * The available command line arguments are:
+ *      -size (or -s)     : The size of the array to compute e.g. -s=1000 would
+ *                          be a 1000 x 1000 array.
+ *      -accuracy (or -a) : The accuracy the array must reach.
+ *
+ * E.g. ./main -s=1000 -t=10 -a=0.001
+ *
+ * @param argc : The argc value for the program.
+ * @param argv : The argv value for the program.
+ * @return : The arguments in an ARGUMENT structure.
+ */
+ARGUMENTS *processArgs(int argc, char *argv[]) {
+    ARGUMENTS *arguments = (ARGUMENTS*)malloc(sizeof(ARGUMENTS));
+    arguments->size = 500;
+    arguments->accuracy = 0.01;
+
+    char *sizeStr = "-size=";
+    char *sStr = "-s=";
+    char *accStr = "-accuracy=";
+    char *aStr = "-a=";
+    for (int i = 1; i < argc; i++) {
+        int len = (int)strlen(argv[i]);
+        if (len > 3 && strncmp(argv[i], sStr, 3) == 0) {
+            char val[len - 2];
+            for (int j = 3; j < len; j++) {
+                val[j - 3] = argv[i][j];
+            }
+            val[len - 3] = '\0';
+            arguments->size = (int) strtoll(val, (char **)NULL, 10);
+        }
+        if (len > 6 && strncmp(argv[i], sizeStr, 6) == 0) {
+            char val[len - 5];
+            for (int j = 6; j < len; j++) {
+                val[j - 6] = argv[i][j];
+            }
+            val[len - 6] = '\0';
+            arguments->size = (int) strtoll(val, (char **)NULL, 10);
+        }
+        if (len > 3 && strncmp(argv[i], aStr, 3) == 0) {
+            char val[len - 2];
+            for (int j = 3; j < len; j++) {
+                val[j - 3] = argv[i][j];
+            }
+            val[len - 3] = '\0';
+            arguments->accuracy = strtod(val, (char**)NULL);
+        }
+        if (len > 10 && strncmp(argv[i], accStr, 10) == 0) {
+            char val[len - 9];
+            for (int j = 10; j < len; j++) {
+                val[j - 10] = argv[i][j];
+            }
+            val[len - 10] = '\0';
+            arguments->accuracy = strtod(val, (char**)NULL);
+        }
+    }
+
+    return arguments;
 }
 
 int calculate(double **in, double **out, int height, int width, double accuracy)
@@ -66,8 +134,12 @@ int main(int argc, char **argv)
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
     MPI_Comm_size(MPI_COMM_WORLD, &nproc);
 
-    int width = 50;
-    double accuracy = 0.01;
+    ARGUMENTS *ar = processArgs(argc, argv);
+
+    int width = ar->size;
+    double accuracy = ar->accuracy;
+
+    if (myrank == 0) printf("Size:%d,Accuracy:%f\n", width, accuracy);
 
     int lineCount = (width - 2) / nproc;
     int rowsCovered = lineCount * nproc;
@@ -143,11 +215,12 @@ int main(int argc, char **argv)
     }
 
     if (myrank == 0) printf("Loops: %d\n", loop);
+    printf("Rank: %d, height: %d\n", myrank, height);
 
-    if (myrank < 6) {
-        printf("Process: %d\n", myrank);
-        printArray(in, height, width);
-    }
+//    if (myrank < 6) {
+//        printf("Process: %d\n", myrank);
+//        printArray(in, height, width);
+//    }
 
     MPI_Finalize();
     return 0;
