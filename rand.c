@@ -4,6 +4,10 @@
 #include <math.h>
 #include <mpi.h>
 
+/**
+ * The structure used for carrying the program arguments back to the main
+ * function. This avoids the use of global variables.
+ */
 typedef struct arguments {
     int size;
     double accuracy;
@@ -28,6 +32,13 @@ double **createArray(int height, int width)
     return arr;
 }
 
+/**
+ * Prints out an array of values to the console.
+ *
+ * @param arr : The array to print.
+ * @param height : The height of the array.
+ * @param width : The width of the array.
+ */
 void printArray(double **arr, int height, int width)
 {
     for (int i = 0; i < height; i++) {
@@ -53,9 +64,11 @@ void printArray(double **arr, int height, int width)
  * @return : The arguments in an ARGUMENT structure.
  */
 ARGUMENTS *processArgs(int argc, char *argv[]) {
-    ARGUMENTS *arguments = (ARGUMENTS*)malloc(sizeof(ARGUMENTS));
-    arguments->size = 500;
-    arguments->accuracy = 0.01;
+    ARGUMENTS *ar = (ARGUMENTS*)malloc(sizeof(ARGUMENTS));
+
+    // Set defaults
+    ar->size = 500;
+    ar->accuracy = 0.01;
 
     char *sizeStr = "-size=";
     char *sStr = "-s=";
@@ -69,7 +82,7 @@ ARGUMENTS *processArgs(int argc, char *argv[]) {
                 val[j - 3] = argv[i][j];
             }
             val[len - 3] = '\0';
-            arguments->size = (int) strtoll(val, (char **)NULL, 10);
+            ar->size = (int) strtoll(val, (char **)NULL, 10);
         }
         if (len > 6 && strncmp(argv[i], sizeStr, 6) == 0) {
             char val[len - 5];
@@ -77,7 +90,7 @@ ARGUMENTS *processArgs(int argc, char *argv[]) {
                 val[j - 6] = argv[i][j];
             }
             val[len - 6] = '\0';
-            arguments->size = (int) strtoll(val, (char **)NULL, 10);
+            ar->size = (int) strtoll(val, (char **)NULL, 10);
         }
         if (len > 3 && strncmp(argv[i], aStr, 3) == 0) {
             char val[len - 2];
@@ -85,7 +98,7 @@ ARGUMENTS *processArgs(int argc, char *argv[]) {
                 val[j - 3] = argv[i][j];
             }
             val[len - 3] = '\0';
-            arguments->accuracy = strtod(val, (char**)NULL);
+            ar->accuracy = strtod(val, (char**)NULL);
         }
         if (len > 10 && strncmp(argv[i], accStr, 10) == 0) {
             char val[len - 9];
@@ -93,13 +106,23 @@ ARGUMENTS *processArgs(int argc, char *argv[]) {
                 val[j - 10] = argv[i][j];
             }
             val[len - 10] = '\0';
-            arguments->accuracy = strtod(val, (char**)NULL);
+            ar->accuracy = strtod(val, (char**)NULL);
         }
     }
 
-    return arguments;
+    return ar;
 }
 
+/**
+ * Calculates the values for the current iteration from the input array.
+ *
+ * @param in : The input array.
+ * @param out : The output array.
+ * @param height : The height of the input and output arrays.
+ * @param width : The width of the input and output arrays.
+ * @param accuracy : The accuracy to work to.
+ * @return : Whether any values changed by more than the accuracy.
+ */
 int calculate(double **in, double **out, int height, int width, double accuracy)
 {
     int changed = 0;
@@ -120,6 +143,21 @@ int calculate(double **in, double **out, int height, int width, double accuracy)
     return changed;
 }
 
+/**
+ * Sends the results to the processes that needs the results and retrieves the
+ * results from other processes and replaces the current values the output
+ * array. The messages are divided into 30000 chunks (if greater) because
+ * messages larger than around 31000 would cause the send to fail, so 30000
+ * was chosen to leave a little headroom and as the closest round number.
+ *
+ * @param arr : The output array from the current iteration.
+ * @param height : The height of the input array.
+ * @param width : The width of the input array.
+ * @param myrank : The rank of the current process.
+ * @param nproc : The number of processes.
+ * @param loop : The current iteration loop count.
+ * @return : 0 if successful and 1 otherwise.
+ */
 int sendAndReceiveResults(double **arr, int height, int width, int myrank, int nproc, int loop)
 {
 //    Original:
@@ -170,6 +208,15 @@ int sendAndReceiveResults(double **arr, int height, int width, int myrank, int n
     return 0;
 }
 
+/**
+ * This program takes a square array of values and iterates across the array
+ * replacing the cells with the sum of its 4 neighbours. The edge values are
+ * fixed.
+ *
+ * @param argc
+ * @param argv
+ * @return
+ */
 int main(int argc, char **argv)
 {
     int rc, myrank, nproc;
@@ -186,6 +233,8 @@ int main(int argc, char **argv)
 
     int width = ar->size;
     double accuracy = ar->accuracy;
+
+    free(ar);
 
     if (myrank == 0) printf("Size:%d,Accuracy:%f\n", width, accuracy);
 
