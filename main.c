@@ -398,9 +398,9 @@ int main(int argc, char **argv)
         loop++;
         changed = calculate(in, out, height, SIZE, accuracy);
         changed = sendAndReceive(out, height, myrank, nproc, loop, changed);
-        double **temp = out;
-        in = out;
+        double **tmp = out;
         out = in;
+        in = tmp;
     }
 
     if (myrank == 0) {

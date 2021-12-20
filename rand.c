@@ -120,25 +120,34 @@ int main(int argc, char **argv)
     while (cont[0]) {
         loop++;
         cont[0] = calculate(in, out, height, width, accuracy);
-        if (myrank > 0) MPI_Send(in[1], width, MPI_DOUBLE, myrank - 1, loop, MPI_COMM_WORLD);
-        if (myrank < nproc - 1) MPI_Send(in[height - 2], width, MPI_DOUBLE, myrank + 1, loop, MPI_COMM_WORLD);
+        if (myrank > 0) MPI_Send(out[1], width, MPI_DOUBLE, myrank - 1, loop, MPI_COMM_WORLD);
+        if (myrank < nproc - 1) MPI_Send(out[height - 2], width, MPI_DOUBLE, myrank + 1, loop, MPI_COMM_WORLD);
         MPI_Status upStat;
-        if (myrank > 0) MPI_Recv(in[0], width, MPI_DOUBLE, myrank - 1, loop, MPI_COMM_WORLD, &upStat);
+        if (myrank > 0) MPI_Recv(out[0], width, MPI_DOUBLE, myrank - 1, loop, MPI_COMM_WORLD, &upStat);
         MPI_Status downStat;
-        if (myrank < nproc - 1) MPI_Recv(in[height - 1], width, MPI_DOUBLE, myrank + 1, loop, MPI_COMM_WORLD, &downStat);
-        double **temp = out;
-        in = out;
+        if (myrank < nproc - 1) MPI_Recv(out[height - 1], width, MPI_DOUBLE, myrank + 1, loop, MPI_COMM_WORLD, &downStat);
+        if (myrank > 0) MPI_Send(cont, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
+        double **tmp = out;
         out = in;
-//        cont[0] = changed;
-//        MPI_Bcast(cont, 1, MPI_INT, 0, MPI_COMM_WORLD);
-//        changed = cont[0];
+        in = tmp;
+        if (myrank == 0) {
+            int tmpVal = cont[0];
+            for (int i = 1; i < nproc; i++) {
+                MPI_Status stat;
+                MPI_Recv(cont, 1, MPI_INT, i, 0, MPI_COMM_WORLD, &stat);
+                if (!tmpVal && cont[0]) tmpVal = 1;
+            }
+            cont[0] = tmpVal;
+        }
+        MPI_Bcast(cont, 1, MPI_INT, 0, MPI_COMM_WORLD);
     }
 
-    if (myrank == 0) {
-        printArray(out, height, width);
-    }
+    if (myrank == 0) printf("Loops: %d\n", loop);
 
-    printf("Process: %d, height: %d\n", myrank, height);
+    if (myrank < 6) {
+        printf("Process: %d\n", myrank);
+        printArray(in, height, width);
+    }
 
     MPI_Finalize();
     return 0;
