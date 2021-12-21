@@ -14,6 +14,11 @@ typedef struct arguments {
     double accuracy;
 } ARGUMENTS;
 
+typedef struct result {
+    int loop;
+    double **arr;
+} RESULT;
+
 /**
  * Builds a 2d array of zeros.
  *
@@ -61,6 +66,16 @@ void freeArray(double **arr, int height)
 {
     freeInnerArrays(arr, height);
     free(arr);
+}
+
+int compareArrays(double **arr1, double **arr2, int height, int width)
+{
+    for (int i = 0; i < height; i++) {
+        for (int j = 0; j < width; j++) {
+            if (arr1[i][j] != arr2[i][j]) return 1;
+        }
+    }
+    return 0;
 }
 
 /**
@@ -130,19 +145,24 @@ ARGUMENTS *processArgs(int argc, char *argv[]) {
 /**
  * The sequential version of the program.
  *
- * @param in : The input array.
+ * @param arr : The input array.
  * @param out : The output array.
  * @param height : The height of the input and output arrays.
  * @param width : The width of the input and output arrays.
  * @param accuracy : The accuracy to work to.
  * @return : The number of loops completed.
  */
-int seq(double **in, double **out, int height, int width, double accuracy) {
-    out[0] = in[0];
-    out[height - 1] = in[height - 1];
+RESULT *seq(double **arr, int height, int width, double accuracy) {
+    double **out = createArray(height, width);
+
+    free(out[0]);
+    free(out[height - 1]);
+    out[0] = arr[0];
+    out[height - 1] = arr[height - 1];
+
     for (int i = 1; i < height - 1; i++) {
-        out[i][0] = in[i][0];
-        out[i][width - 1] = in[i][width - 1];
+        out[i][0] = arr[i][0];
+        out[i][width - 1] = arr[i][width - 1];
     }
 
     int changed = 1;
@@ -154,23 +174,31 @@ int seq(double **in, double **out, int height, int width, double accuracy) {
 
         for (int i = 1; i < height - 1; i++) {
             for (int j = 1; j < width - 1; j++) {
-                double val = in[i - 1][j];
-                val += in[i + 1][j];
-                val += in[i][j - 1];
-                val += in[i][j + 1];
+                double val = arr[i - 1][j];
+                val += arr[i + 1][j];
+                val += arr[i][j - 1];
+                val += arr[i][j + 1];
                 val /= 4;
                 out[i][j] = val;
 
-                if (!changed && (fabs((val - in[i][j])) > accuracy)) changed = 1;
+                if (!changed && (fabs((val - arr[i][j])) > accuracy)) changed = 1;
             }
         }
 
-        double **tmp = in;
-        in = out;
+        double **tmp = arr;
+        arr = out;
         out = tmp;
     }
 
-    return loop;
+    double **tmp = arr;
+    arr = out;
+    out = tmp;
+
+    RESULT *res = (RESULT*)malloc(sizeof(RESULT));
+    res->loop = loop;
+    res->arr = out;
+
+    return res;
 }
 
 /**
@@ -447,20 +475,16 @@ int main(int argc, char **argv)
         return 0;
     }
 
-//    double **in2;
-//    double **out2;
-//    if (width < 5001) {
-//        in2 = createArray(height, width);
-//        out2 = createArray(height, width);
-//        free(in2[0]);
-//        free(in2[height - 1]);
-//        free(out2[0]);
-//        free(out2[height - 1]);
-//        in2[0] = in[0];
-//        in2[height - 1] = in[height - 1];
-//        out2[0] = in[0];
-//        out2[height - 1] = in[height - 1];
-//    }
+    double **in2;
+    double **out2;
+    if (width < 5001) {
+        in2 = gatherArray(in, height, width, myrank, nproc);
+
+        if (myrank == 0 && in2 == NULL) {
+            printf("Error gathering initial array.\n");
+            MPI_Abort(MPI_COMM_WORLD, MPI_ERR_UNKNOWN);
+        }
+    }
 
     int cont[1];
     cont[0] = 1;
@@ -501,14 +525,30 @@ int main(int argc, char **argv)
     freeInnerArrays(out + 1, height - 2);
     free(out);
 
-    if (myrank < 6 && width < 51) {
-        printf("Process %d:\n", myrank);
-        printArray(in, height, width);
-    }
+    if (width < 5001) {
+        double **final = gatherArray(in, height, width, myrank, nproc);
+        if (myrank == 0) {
+            if (final == NULL) {
+                printf("Error gathering final array.\n");
+                MPI_Abort(MPI_COMM_WORLD, MPI_ERR_UNKNOWN);
+            }
+            RESULT *res = seq(in2, width, width, accuracy);
 
-//    if (width < 5001) {
-//        seq(in2, out2, height, width, accuracy);
-//    }
+            freeInnerArrays(in2 + 1, width - 2);
+            free(in2);
+
+            if (loop == res->loop) printf("Loop check succeeded.\n");
+            else printf("Loop check failed.\n");
+
+            if(compareArrays(final, res->arr, width, width)) {
+                printf("Array comparison failed.\n");
+            } else printf("Array comparison succeeded.\n");
+
+            freeArray(final, width);
+            freeArray(res->arr, width);
+            free(res);
+        }
+    }
 
     freeArray(in, height);
 
