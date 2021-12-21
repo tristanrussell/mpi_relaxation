@@ -203,6 +203,51 @@ int calculate(double **in, double **out, int height, int width, double accuracy)
     return changed;
 }
 
+int sendRow(double *row, int width, int dest, int tag)
+{
+    int w = width;
+    int acc = 0;
+    int rc;
+
+    while (w > 0) {
+        if (w > 30000) {
+            rc = MPI_Send(row + acc, 30000, MPI_DOUBLE, dest, tag, MPI_COMM_WORLD);
+            if (rc != MPI_SUCCESS) return rc;
+            w -= 30000;
+            acc += 30000;
+        } else {
+            rc = MPI_Send(row + acc, w, MPI_DOUBLE, dest, tag, MPI_COMM_WORLD);
+            if (rc != MPI_SUCCESS) return rc;
+            w -= w;
+        }
+    }
+
+    return MPI_SUCCESS;
+}
+
+int receiveRow(double *row, int width, int dest, int tag)
+{
+    int w = width;
+    int acc = 0;
+    int rc;
+
+    while (w > 0) {
+        MPI_Status stat;
+        if (w > 30000) {
+            rc = MPI_Recv(row + acc, 30000, MPI_DOUBLE, dest, tag, MPI_COMM_WORLD, &stat);
+            if (rc != MPI_SUCCESS) return rc;
+            w -= 30000;
+            acc += 30000;
+        } else {
+            rc = MPI_Recv(row + acc, w, MPI_DOUBLE, dest, tag, MPI_COMM_WORLD, &stat);
+            if (rc != MPI_SUCCESS) return rc;
+            w -= w;
+        }
+    }
+
+    return MPI_SUCCESS;
+}
+
 /**
  * Sends the results to the processes that needs the results and retrieves the
  * results from other processes and replaces the current values the output
@@ -268,6 +313,65 @@ int sendAndReceiveResults(double **arr, int height, int width, int myrank, int n
     return 0;
 }
 
+double **gatherArray(double **arr, int height, int width, int myrank, int nproc)
+{
+    double **retArr;
+
+    if (myrank == 0) {
+        retArr = createArray(width, width);
+
+        for (int i = 0; i < height - 1; i++) {
+            for (int j = 0; j < width; j++) {
+                retArr[i][j] = arr[i][j];
+            }
+        }
+
+        int curr = height - 1;
+        for (int i = 1; i < nproc; i++) {
+            int lineCount = (width - 2) / nproc;
+            int rowsCovered = lineCount * nproc;
+            int rowsLeft = (width - 2) - rowsCovered;
+            if (i < rowsLeft) lineCount++;
+
+            for (int j = 0; j < lineCount; j++) {
+                int recvStat = receiveRow(retArr[curr], width, i, 0);
+                if (recvStat != MPI_SUCCESS) {
+                    printf("Error receiving array.\n");
+                    MPI_Abort(MPI_COMM_WORLD, recvStat);
+                }
+                curr++;
+            }
+            if (i == nproc - 1) {
+                int recvStat = receiveRow(retArr[curr], width, i, 0);
+                if (recvStat != MPI_SUCCESS) {
+                    printf("Error receiving array.\n");
+                    MPI_Abort(MPI_COMM_WORLD, recvStat);
+                }
+                curr++;
+            }
+        }
+
+        return retArr;
+    }
+
+    for (int i = 1; i < height - 1; i++) {
+        int sendStat = sendRow(arr[i], width, 0, 0);
+        if (sendStat != MPI_SUCCESS) {
+            printf("Error receiving array.\n");
+            MPI_Abort(MPI_COMM_WORLD, sendStat);
+        }
+    }
+    if (myrank == nproc - 1) {
+        int sendStat = sendRow(arr[height - 1], width, 0, 0);
+        if (sendStat != MPI_SUCCESS) {
+            printf("Error receiving array.\n");
+            MPI_Abort(MPI_COMM_WORLD, sendStat);
+        }
+    }
+
+    return NULL;
+}
+
 /**
  * This program takes a square array of values and iterates across the array
  * replacing the cells with the sum of its 4 neighbours. The edge values are
@@ -288,6 +392,8 @@ int main(int argc, char **argv)
     }
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
     MPI_Comm_size(MPI_COMM_WORLD, &nproc);
+
+    srand((myrank + 1) * time(NULL));
 
     ARGUMENTS *ar = processArgs(argc, argv);
 
@@ -312,36 +418,33 @@ int main(int argc, char **argv)
     out[0] = in[0];
     out[height - 1] = in[height - 1];
 
+    double max = 10.0;
+    double min = -10.0;
+    double range = (max - min);
+    double div = RAND_MAX / range;
+
     if (myrank == 0) {
         for (int i = 0; i < width; i++) {
-            in[0][i] = 1.0;
+            in[0][i] = min + rand() / div;
         }
-        for (int i = 1; i < height; i++) {
-            in[i][0] = 1.0;
-            in[i][width - 1] = 1.0;
-            for (int j = 1; j < width - 1; j++) {
-                in[i][j] = 0.0;
-            }
+    }
+    for (int i = 1; i < height - 1; i++) {
+        in[i][0] = min + rand() / div;
+        in[i][width - 1] = min + rand() / div;
+        for (int j = 1; j < width - 1; j++) {
+            in[i][j] = 0.0;
         }
-    } else if (myrank == nproc - 1) {
+    }
+    if (myrank == nproc - 1) {
         for (int i = 0; i < width; i++) {
-            in[height - 1][i] = 1.0;
+            in[height - 1][i] = min + rand() / div;
         }
-        for (int i = 0; i < height - 1; i++) {
-            in[i][0] = 1.0;
-            in[i][width - 1] = 1.0;
-            for (int j = 1; j < width - 1; j++) {
-                in[i][j] = 0.0;
-            }
-        }
-    } else {
-        for (int i = 0; i < height; i++) {
-            in[i][0] = 1.0;
-            in[i][width - 1] = 1.0;
-            for (int j = 1; j < width - 1; j++) {
-                in[i][j] = 0.0;
-            }
-        }
+    }
+
+    if(sendAndReceiveResults(out, height, width, myrank, nproc, 0) != 0) {
+        if (myrank == 0) printf("Error initialising array.\n");
+        MPI_Finalize();
+        return 0;
     }
 
 //    double **in2;
@@ -397,6 +500,11 @@ int main(int argc, char **argv)
 
     freeInnerArrays(out + 1, height - 2);
     free(out);
+
+    if (myrank < 6 && width < 51) {
+        printf("Process %d:\n", myrank);
+        printArray(in, height, width);
+    }
 
 //    if (width < 5001) {
 //        seq(in2, out2, height, width, accuracy);
