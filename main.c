@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+#include <time.h>
 #include <mpi.h>
 
 /**
@@ -47,6 +48,19 @@ void printArray(double **arr, int height, int width)
         }
         printf("\n");
     }
+}
+
+void freeInnerArrays(double **arr, int height)
+{
+    for (int i = 0; i < height; i++) {
+        free(arr[i]);
+    }
+}
+
+void freeArray(double **arr, int height)
+{
+    freeInnerArrays(arr, height);
+    free(arr);
 }
 
 /**
@@ -111,6 +125,52 @@ ARGUMENTS *processArgs(int argc, char *argv[]) {
     }
 
     return ar;
+}
+
+/**
+ * The sequential version of the program.
+ *
+ * @param in : The input array.
+ * @param out : The output array.
+ * @param height : The height of the input and output arrays.
+ * @param width : The width of the input and output arrays.
+ * @param accuracy : The accuracy to work to.
+ * @return : The number of loops completed.
+ */
+int seq(double **in, double **out, int height, int width, double accuracy) {
+    out[0] = in[0];
+    out[height - 1] = in[height - 1];
+    for (int i = 1; i < height - 1; i++) {
+        out[i][0] = in[i][0];
+        out[i][width - 1] = in[i][width - 1];
+    }
+
+    int changed = 1;
+    int loop = 0;
+
+    while (changed) {
+        changed = 0;
+        loop++;
+
+        for (int i = 1; i < height - 1; i++) {
+            for (int j = 1; j < width - 1; j++) {
+                double val = in[i - 1][j];
+                val += in[i + 1][j];
+                val += in[i][j - 1];
+                val += in[i][j + 1];
+                val /= 4;
+                out[i][j] = val;
+
+                if (!changed && (fabs((val - in[i][j])) > accuracy)) changed = 1;
+            }
+        }
+
+        double **tmp = in;
+        in = out;
+        out = tmp;
+    }
+
+    return loop;
 }
 
 /**
@@ -284,18 +344,36 @@ int main(int argc, char **argv)
         }
     }
 
+//    double **in2;
+//    double **out2;
+//    if (width < 5001) {
+//        in2 = createArray(height, width);
+//        out2 = createArray(height, width);
+//        free(in2[0]);
+//        free(in2[height - 1]);
+//        free(out2[0]);
+//        free(out2[height - 1]);
+//        in2[0] = in[0];
+//        in2[height - 1] = in[height - 1];
+//        out2[0] = in[0];
+//        out2[height - 1] = in[height - 1];
+//    }
+
     int cont[1];
     cont[0] = 1;
-
     int loop = 0;
+
+    struct timespec begin, end;
+    clock_gettime(CLOCK_MONOTONIC, &begin);
+
     while (cont[0]) {
         loop++;
         cont[0] = calculate(in, out, height, width, accuracy);
         int sendRes = sendAndReceiveResults(out, height, width, myrank, nproc, loop);
         if (myrank > 0) MPI_Send(cont, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
-        double **tmp = out;
-        out = in;
-        in = tmp;
+        double **tmp = in;
+        in = out;
+        out = tmp;
         if (myrank == 0) {
             int tmpVal = cont[0];
             for (int i = 1; i < nproc; i++) {
@@ -308,13 +386,23 @@ int main(int argc, char **argv)
         MPI_Bcast(cont, 1, MPI_INT, 0, MPI_COMM_WORLD);
     }
 
-    if (myrank == 0) printf("Loops: %d\n", loop);
-    printf("Rank: %d, height: %d\n", myrank, height);
+    clock_gettime(CLOCK_MONOTONIC, &end);
 
-//    if (myrank < 6) {
-//        printf("Process: %d\n", myrank);
-//        printArray(in, height, width);
+    if (myrank == 0) {
+        printf("Loops: %d\n", loop);
+        printf("Microseconds:%lu\n",
+               (unsigned long) (((end.tv_sec - begin.tv_sec) * 1e6) +
+                                ((end.tv_nsec - begin.tv_nsec) / 1e3)));
+    }
+
+    freeInnerArrays(out + 1, height - 2);
+    free(out);
+
+//    if (width < 5001) {
+//        seq(in2, out2, height, width, accuracy);
 //    }
+
+    freeArray(in, height);
 
     MPI_Finalize();
     return 0;
