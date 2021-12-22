@@ -12,6 +12,7 @@
 typedef struct arguments {
     int size;
     double accuracy;
+    int randSeed;
 } ARGUMENTS;
 
 typedef struct result {
@@ -95,17 +96,19 @@ int compareArrays(double **arr1, double **arr2, int height, int width)
  * @param argv : The argv value for the program.
  * @return : The arguments in an ARGUMENT structure.
  */
-ARGUMENTS *processArgs(int argc, char *argv[]) {
+ARGUMENTS *processArgs(int argc, char *argv[], int myrank) {
     ARGUMENTS *ar = (ARGUMENTS*)malloc(sizeof(ARGUMENTS));
 
     // Set defaults
     ar->size = 500;
     ar->accuracy = 0.01;
+    ar->randSeed = (myrank + 1) * time(NULL);
 
     char *sizeStr = "-size=";
     char *sStr = "-s=";
     char *accStr = "-accuracy=";
     char *aStr = "-a=";
+    char *seedStr = "-seed=";
     for (int i = 1; i < argc; i++) {
         int len = (int)strlen(argv[i]);
         if (len > 3 && strncmp(argv[i], sStr, 3) == 0) {
@@ -139,6 +142,14 @@ ARGUMENTS *processArgs(int argc, char *argv[]) {
             }
             val[len - 10] = '\0';
             ar->accuracy = strtod(val, (char**)NULL);
+        }
+        if (len > 6 && strncmp(argv[i], seedStr, 6) == 0) {
+            char val[len - 5];
+            for (int j = 6; j < len; j++) {
+                val[j - 6] = argv[i][j];
+            }
+            val[len - 6] = '\0';
+            ar->randSeed = (int) strtoll(val, (char**)NULL, 10);
         }
     }
 
@@ -421,9 +432,9 @@ int main(int argc, char **argv)
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
     MPI_Comm_size(MPI_COMM_WORLD, &nproc);
 
-    srand((myrank + 1) * time(NULL));
+    ARGUMENTS *ar = processArgs(argc, argv, myrank);
 
-    ARGUMENTS *ar = processArgs(argc, argv);
+    srand(ar->randSeed);
 
     int width = ar->size;
     double accuracy = ar->accuracy;
