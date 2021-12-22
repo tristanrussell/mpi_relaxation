@@ -217,8 +217,6 @@ int calculate(double **in, double **out, int height, int width, double accuracy)
 {
     int changed = 0;
     for (int i = 1; i < height - 1; i++) {
-        out[i][0] = in[i][0];
-        out[i][width - 1] = in[i][width - 1];
         for (int j = 1; j < width - 1; j++) {
             double val = in[i - 1][j];
             val += in[i + 1][j];
@@ -459,8 +457,12 @@ int main(int argc, char **argv)
         }
     }
     for (int i = 1; i < height - 1; i++) {
-        in[i][0] = min + rand() / div;
-        in[i][width - 1] = min + rand() / div;
+        int leftVal = min + rand() / div;
+        int rightVal = min + rand() / div;
+        in[i][0] = leftVal;
+        out[i][0] = leftVal;
+        in[i][width - 1] = rightVal;
+        out[i][width - 1] = rightVal;
         for (int j = 1; j < width - 1; j++) {
             in[i][j] = 0.0;
         }
