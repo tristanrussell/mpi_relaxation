@@ -72,7 +72,10 @@ int compareArrays(double **arr1, double **arr2, int height, int width)
 {
     for (int i = 0; i < height; i++) {
         for (int j = 0; j < width; j++) {
-            if (arr1[i][j] != arr2[i][j]) return 1;
+            if (arr1[i][j] != arr2[i][j]) {
+                printf("Array check failed on: %d, %d with values %1.2f, %1.2f\n", i, j, arr1[i][j], arr2[i][j]);
+                return 1;
+            }
         }
     }
     return 0;
@@ -145,24 +148,25 @@ ARGUMENTS *processArgs(int argc, char *argv[]) {
 /**
  * The sequential version of the program.
  *
- * @param arr : The input array.
+ * @param tmp1 : The input array.
  * @param out : The output array.
  * @param height : The height of the input and output arrays.
  * @param width : The width of the input and output arrays.
  * @param accuracy : The accuracy to work to.
  * @return : The number of loops completed.
  */
-RESULT *seq(double **arr, int height, int width, double accuracy) {
-    double **out = createArray(height, width);
+RESULT *seq(double **in, int height, int width, double accuracy) {
+    double **arr = in;
+    double **arr2 = createArray(height, width);
 
-    free(out[0]);
-    free(out[height - 1]);
-    out[0] = arr[0];
-    out[height - 1] = arr[height - 1];
+    free(arr2[0]);
+    free(arr2[height - 1]);
+    arr2[0] = arr[0];
+    arr2[height - 1] = arr[height - 1];
 
     for (int i = 1; i < height - 1; i++) {
-        out[i][0] = arr[i][0];
-        out[i][width - 1] = arr[i][width - 1];
+        arr2[i][0] = arr[i][0];
+        arr2[i][width - 1] = arr[i][width - 1];
     }
 
     int changed = 1;
@@ -179,25 +183,23 @@ RESULT *seq(double **arr, int height, int width, double accuracy) {
                 val += arr[i][j - 1];
                 val += arr[i][j + 1];
                 val /= 4;
-                out[i][j] = val;
+                arr2[i][j] = val;
 
                 if (!changed && (fabs((val - arr[i][j])) > accuracy)) changed = 1;
             }
         }
 
         double **tmp = arr;
-        arr = out;
-        out = tmp;
+        arr = arr2;
+        arr2 = tmp;
     }
 
-    double **tmp = arr;
-    arr = out;
-    out = tmp;
+    freeInnerArrays(arr2 + 1, height - 2);
+    free(arr2);
 
-    RESULT *res = (RESULT*)malloc(sizeof(RESULT));
+    RESULT *res = (RESULT *) malloc(sizeof(RESULT));
     res->loop = loop;
-    res->arr = out;
-
+    res->arr = arr;
     return res;
 }
 
@@ -477,7 +479,7 @@ int main(int argc, char **argv)
 
     double **in2;
     double **out2;
-    if (width < 5001) {
+    if (width < 10001) {
         in2 = gatherArray(in, height, width, myrank, nproc);
 
         if (myrank == 0 && in2 == NULL) {
@@ -525,7 +527,7 @@ int main(int argc, char **argv)
     freeInnerArrays(out + 1, height - 2);
     free(out);
 
-    if (width < 5001) {
+    if (width < 10001) {
         double **final = gatherArray(in, height, width, myrank, nproc);
         if (myrank == 0) {
             if (final == NULL) {
@@ -534,15 +536,13 @@ int main(int argc, char **argv)
             }
             RESULT *res = seq(in2, width, width, accuracy);
 
-            freeInnerArrays(in2 + 1, width - 2);
-            free(in2);
-
             if (loop == res->loop) printf("Loop check succeeded.\n");
             else printf("Loop check failed.\n");
 
-            if(compareArrays(final, res->arr, width, width)) {
-                printf("Array comparison failed.\n");
-            } else printf("Array comparison succeeded.\n");
+            int cmpRes = compareArrays(final, res->arr, width, width);
+
+            if (cmpRes) printf("Array comparison failed.\n");
+            else printf("Array comparison succeeded.\n");
 
             freeArray(final, width);
             freeArray(res->arr, width);
