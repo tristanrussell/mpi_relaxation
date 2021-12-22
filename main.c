@@ -475,8 +475,7 @@ int main(int argc, char **argv)
 
     if(sendAndReceiveResults(out, height, width, myrank, nproc, 0) != 0) {
         if (myrank == 0) printf("Error initialising array.\n");
-        MPI_Finalize();
-        return 0;
+        MPI_Abort(MPI_COMM_WORLD, MPI_ERR_UNKNOWN);
     }
 
     double **in2;
@@ -501,6 +500,10 @@ int main(int argc, char **argv)
         loop++;
         cont[0] = calculate(in, out, height, width, accuracy);
         int sendRes = sendAndReceiveResults(out, height, width, myrank, nproc, loop);
+        if (sendRes != 0) {
+            if (myrank == 0) printf("Error sending results.\n");
+            MPI_Abort(MPI_COMM_WORLD, MPI_ERR_UNKNOWN);
+        }
         if (myrank > 0) MPI_Send(cont, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
         double **tmp = in;
         in = out;
