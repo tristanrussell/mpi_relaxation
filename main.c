@@ -96,13 +96,13 @@ int compareArrays(double **arr1, double **arr2, int height, int width)
  * @param argv : The argv value for the program.
  * @return : The arguments in an ARGUMENT structure.
  */
-ARGUMENTS *processArgs(int argc, char *argv[], int myrank) {
+ARGUMENTS *processArgs(int argc, char *argv[]) {
     ARGUMENTS *ar = (ARGUMENTS*)malloc(sizeof(ARGUMENTS));
 
     // Set defaults
     ar->size = 500;
     ar->accuracy = 0.01;
-    ar->randSeed = (myrank + 1) * time(NULL);
+    ar->randSeed = time(NULL);
 
     char *sizeStr = "-size=";
     char *sStr = "-s=";
@@ -432,9 +432,9 @@ int main(int argc, char **argv)
     MPI_Comm_rank(MPI_COMM_WORLD, &myrank);
     MPI_Comm_size(MPI_COMM_WORLD, &nproc);
 
-    ARGUMENTS *ar = processArgs(argc, argv, myrank);
+    ARGUMENTS *ar = processArgs(argc, argv);
 
-    srand(ar->randSeed);
+    srand((myrank + 1) * ar->randSeed);
 
     int width = ar->size;
     double accuracy = ar->accuracy;
