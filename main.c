@@ -369,7 +369,7 @@ double **distributeArray(double **arr, int width, int myrank, int nproc)
         }
     }
 
-    int curr = currHeight;
+    int curr = currHeight - 1;
     for (int i = 1; i < nproc; i++) {
         currHeight = height;
         if (i < rowsLeft) currHeight++;
