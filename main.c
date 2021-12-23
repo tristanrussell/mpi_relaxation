@@ -352,6 +352,11 @@ int sendAndReceiveResults(double **arr, int height, int width, int myrank, int n
     return 0;
 }
 
+double **distributeArray()
+{
+
+}
+
 double **gatherArray(double **arr, int height, int width, int myrank, int nproc)
 {
     double **retArr;
@@ -434,7 +439,7 @@ int main(int argc, char **argv)
 
     ARGUMENTS *ar = processArgs(argc, argv);
 
-    srand((myrank + 1) * ar->randSeed);
+    srand(ar->randSeed);
 
     int width = ar->size;
     double accuracy = ar->accuracy;
@@ -452,42 +457,42 @@ int main(int argc, char **argv)
 
     double **in = createArray(height, width);
     double **out = createArray(height, width);
+    double **original;
     free(out[0]);
     free(out[height - 1]);
     out[0] = in[0];
     out[height - 1] = in[height - 1];
 
-    double max = 10.0;
-    double min = -10.0;
-    double range = (max - min);
-    double div = RAND_MAX / range;
-
     if (myrank == 0) {
+        original = createArray(width, width);
+
+        double max = 10.0;
+        double min = -10.0;
+        double range = (max - min);
+        double div = RAND_MAX / range;
+
         for (int i = 0; i < width; i++) {
-            in[0][i] = min + rand() / div;
+            original[0][i] = min + rand() / div;
         }
-    }
-    for (int i = 1; i < height - 1; i++) {
-        int leftVal = min + rand() / div;
-        int rightVal = min + rand() / div;
-        in[i][0] = leftVal;
-        out[i][0] = leftVal;
-        in[i][width - 1] = rightVal;
-        out[i][width - 1] = rightVal;
-        for (int j = 1; j < width - 1; j++) {
-            in[i][j] = 0.0;
+        for (int i = 1; i < width - 1; i++) {
+            original[i][0] = min + rand() / div;
+            original[i][width - 1] = min + rand() / div;
+            for (int j = 1; j < width - 1; j++) {
+                original[i][j] = 0.0;
+            }
         }
-    }
-    if (myrank == nproc - 1) {
         for (int i = 0; i < width; i++) {
-            in[height - 1][i] = min + rand() / div;
+            original[width - 1][i] = min + rand() / div;
+        }
+
+        distributeArray();
+    } else {
+        for (int i = 0; i < height; i++) {
+            receiveRow(in[i], width, 0, 0);
         }
     }
 
-    if(sendAndReceiveResults(out, height, width, myrank, nproc, 0) != 0) {
-        if (myrank == 0) printf("Error initialising array.\n");
-        MPI_Abort(MPI_COMM_WORLD, MPI_ERR_UNKNOWN);
-    }
+    // Now need to set edges of out to equal edges of in as these aren't linked
 
     double **in2;
     double **out2;
