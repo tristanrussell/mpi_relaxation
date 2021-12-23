@@ -352,14 +352,57 @@ int sendAndReceiveResults(double **arr, int height, int width, int myrank, int n
     return 0;
 }
 
-double **distributeArray()
+double **distributeArray(double **arr, int width, int myrank, int nproc)
 {
+    int lineCount = (width - 2) / nproc;
+    int rowsCovered = lineCount * nproc;
+    int rowsLeft = (width - 2) - rowsCovered;
+    int height = lineCount + 2;
+    int currHeight = height;
+    if (0 < rowsLeft) currHeight++;
 
+    double **retArr = createArray(currHeight, width);
+
+    for (int i = 0; i < currHeight; i++) {
+        for (int j = 0; j < width; j++) {
+            retArr[i][j] = arr[i][j];
+        }
+    }
+
+    int curr = currHeight;
+    for (int i = 1; i < nproc; i++) {
+        currHeight = height;
+        if (i < rowsLeft) currHeight++;
+
+        for (int j = -1; j < currHeight - 1; j++) {
+            int sendStat = sendRow(arr[curr + j], width, i, 0);
+            if (sendStat != MPI_SUCCESS) {
+                printf("Error receiving array.\n");
+                MPI_Abort(MPI_COMM_WORLD, sendStat);
+            }
+        }
+
+        curr += (currHeight - 2);
+    }
+
+    return retArr;
 }
 
 double **gatherArray(double **arr, int height, int width, int myrank, int nproc)
 {
     double **retArr;
+
+    if (nproc == 1) {
+        retArr = createArray(width, width);
+
+        for (int i = 0; i < height; i++) {
+            for (int j = 0; j < width; j++) {
+                retArr[i][j] = arr[i][j];
+            }
+        }
+
+        return retArr;
+    }
 
     if (myrank == 0) {
         retArr = createArray(width, width);
@@ -455,13 +498,9 @@ int main(int argc, char **argv)
     int height = lineCount + 2;
     if (myrank < rowsLeft) height++;
 
-    double **in = createArray(height, width);
-    double **out = createArray(height, width);
+    double **in;
+    double **out;
     double **original;
-    free(out[0]);
-    free(out[height - 1]);
-    out[0] = in[0];
-    out[height - 1] = in[height - 1];
 
     if (myrank == 0) {
         original = createArray(width, width);
@@ -473,6 +512,7 @@ int main(int argc, char **argv)
 
         for (int i = 0; i < width; i++) {
             original[0][i] = min + rand() / div;
+            original[width - 1][i] = min + rand() / div;
         }
         for (int i = 1; i < width - 1; i++) {
             original[i][0] = min + rand() / div;
@@ -481,28 +521,29 @@ int main(int argc, char **argv)
                 original[i][j] = 0.0;
             }
         }
-        for (int i = 0; i < width; i++) {
-            original[width - 1][i] = min + rand() / div;
-        }
 
-        distributeArray();
+        in = distributeArray(original, width, myrank, nproc);
     } else {
+        in = createArray(height, width);
+
         for (int i = 0; i < height; i++) {
-            receiveRow(in[i], width, 0, 0);
+            int recvStat = receiveRow(in[i], width, 0, 0);
+            if (recvStat != MPI_SUCCESS) {
+                printf("Error receiving array.\n");
+                MPI_Abort(MPI_COMM_WORLD, recvStat);
+            }
         }
     }
 
-    // Now need to set edges of out to equal edges of in as these aren't linked
+    out = createArray(height, width);
+    free(out[0]);
+    free(out[height - 1]);
+    out[0] = in[0];
+    out[height - 1] = in[height - 1];
 
-    double **in2;
-    double **out2;
-    if (width < 10001) {
-        in2 = gatherArray(in, height, width, myrank, nproc);
-
-        if (myrank == 0 && in2 == NULL) {
-            printf("Error gathering initial array.\n");
-            MPI_Abort(MPI_COMM_WORLD, MPI_ERR_UNKNOWN);
-        }
+    for (int i = 1; i < height - 1; i++) {
+        out[i][0] = in[i][0];
+        out[i][width - 1] = in[i][width - 1];
     }
 
     int cont[1];
@@ -555,7 +596,7 @@ int main(int argc, char **argv)
                 printf("Error gathering final array.\n");
                 MPI_Abort(MPI_COMM_WORLD, MPI_ERR_UNKNOWN);
             }
-            RESULT *res = seq(in2, width, width, accuracy);
+            RESULT *res = seq(original, width, width, accuracy);
 
             if (loop == res->loop) printf("Loop check succeeded.\n");
             else printf("Loop check failed.\n");
