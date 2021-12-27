@@ -304,49 +304,80 @@ int receiveRow(double *row, int width, int dest, int tag)
  */
 int sendAndReceiveResults(double **arr, int height, int width, int myrank, int nproc, int loop)
 {
-//    Original:
-//    if (myrank > 0) MPI_Send(arr[1], width, MPI_DOUBLE, myrank - 1, loop, MPI_COMM_WORLD);
-//    if (myrank < nproc - 1) MPI_Send(arr[height - 2], width, MPI_DOUBLE, myrank + 1, loop, MPI_COMM_WORLD);
-//    MPI_Status upStat;
-//    if (myrank > 0) MPI_Recv(arr[0], width, MPI_DOUBLE, myrank - 1, loop, MPI_COMM_WORLD, &upStat);
-//    MPI_Status downStat;
-//    if (myrank < nproc - 1) MPI_Recv(arr[height - 1], width, MPI_DOUBLE, myrank + 1, loop, MPI_COMM_WORLD, &downStat);
-//    return 0;
-
     int w = width;
     int acc = 0;
 
+    int reqCount = width / 30000;
+    if (width % 30000) reqCount++;
+    reqCount *= 2;
+    if (myrank > 0 && myrank < nproc - 1) reqCount *= 2;
+
+    MPI_Request reqs[reqCount];
+
+    reqCount = 0;
+
     while (w > 0) {
         if (w > 30000) {
-            if (myrank > 0) MPI_Send(arr[1] + acc, 30000, MPI_DOUBLE, myrank - 1, loop, MPI_COMM_WORLD);
-            if (myrank < nproc - 1) MPI_Send(arr[height - 2] + acc, 30000, MPI_DOUBLE, myrank + 1, loop, MPI_COMM_WORLD);
+            if (myrank > 0) MPI_Isend(arr[1] + acc, 30000, MPI_DOUBLE, myrank - 1, loop, MPI_COMM_WORLD, &reqs[reqCount++]);
+            if (myrank < nproc - 1) MPI_Isend(arr[height - 2] + acc, 30000, MPI_DOUBLE, myrank + 1, loop, MPI_COMM_WORLD, &reqs[reqCount++]);
             w -= 30000;
             acc += 30000;
         } else {
-            if (myrank > 0) MPI_Send(arr[1] + acc, w, MPI_DOUBLE, myrank - 1, loop, MPI_COMM_WORLD);
-            if (myrank < nproc - 1) MPI_Send(arr[height - 2] + acc, w, MPI_DOUBLE, myrank + 1, loop, MPI_COMM_WORLD);
+            if (myrank > 0) MPI_Isend(arr[1] + acc, w, MPI_DOUBLE, myrank - 1, loop, MPI_COMM_WORLD, &reqs[reqCount++]);
+            if (myrank < nproc - 1) MPI_Isend(arr[height - 2] + acc, w, MPI_DOUBLE, myrank + 1, loop, MPI_COMM_WORLD, &reqs[reqCount++]);
             w -= w;
         }
     }
+
+//    while (w > 0) {
+//        if (w > 30000) {
+//            if (myrank > 0) MPI_Send(arr[1] + acc, 30000, MPI_DOUBLE, myrank - 1, loop, MPI_COMM_WORLD);
+//            if (myrank < nproc - 1) MPI_Send(arr[height - 2] + acc, 30000, MPI_DOUBLE, myrank + 1, loop, MPI_COMM_WORLD);
+//            w -= 30000;
+//            acc += 30000;
+//        } else {
+//            if (myrank > 0) MPI_Send(arr[1] + acc, w, MPI_DOUBLE, myrank - 1, loop, MPI_COMM_WORLD);
+//            if (myrank < nproc - 1) MPI_Send(arr[height - 2] + acc, w, MPI_DOUBLE, myrank + 1, loop, MPI_COMM_WORLD);
+//            w -= w;
+//        }
+//    }
 
     w = width;
     acc = 0;
 
     while (w > 0) {
         if (w > 30000) {
-            MPI_Status upStat;
-            if (myrank > 0) MPI_Recv(arr[0] + acc, 30000, MPI_DOUBLE, myrank - 1, loop, MPI_COMM_WORLD, &upStat);
-            MPI_Status downStat;
-            if (myrank < nproc - 1) MPI_Recv(arr[height - 1] + acc, 30000, MPI_DOUBLE, myrank + 1, loop, MPI_COMM_WORLD, &downStat);
+            if (myrank > 0) MPI_Irecv(arr[0] + acc, 30000, MPI_DOUBLE, myrank - 1, loop, MPI_COMM_WORLD, &reqs[reqCount++]);
+            if (myrank < nproc - 1) MPI_Irecv(arr[height - 1] + acc, 30000, MPI_DOUBLE, myrank + 1, loop, MPI_COMM_WORLD, &reqs[reqCount++]);
             w -= 30000;
             acc += 30000;
         } else {
-            MPI_Status upStat;
-            if (myrank > 0) MPI_Recv(arr[0] + acc, w, MPI_DOUBLE, myrank - 1, loop, MPI_COMM_WORLD, &upStat);
-            MPI_Status downStat;
-            if (myrank < nproc - 1) MPI_Recv(arr[height - 1] + acc, w, MPI_DOUBLE, myrank + 1, loop, MPI_COMM_WORLD, &downStat);
+            if (myrank > 0) MPI_Irecv(arr[0] + acc, w, MPI_DOUBLE, myrank - 1, loop, MPI_COMM_WORLD, &reqs[reqCount++]);
+            if (myrank < nproc - 1) MPI_Irecv(arr[height - 1] + acc, w, MPI_DOUBLE, myrank + 1, loop, MPI_COMM_WORLD, &reqs[reqCount++]);
             w -= w;
         }
+    }
+
+//    while (w > 0) {
+//        if (w > 30000) {
+//            MPI_Status upStat;
+//            if (myrank > 0) MPI_Recv(arr[0] + acc, 30000, MPI_DOUBLE, myrank - 1, loop, MPI_COMM_WORLD, &upStat);
+//            MPI_Status downStat;
+//            if (myrank < nproc - 1) MPI_Recv(arr[height - 1] + acc, 30000, MPI_DOUBLE, myrank + 1, loop, MPI_COMM_WORLD, &downStat);
+//            w -= 30000;
+//            acc += 30000;
+//        } else {
+//            MPI_Status upStat;
+//            if (myrank > 0) MPI_Recv(arr[0] + acc, w, MPI_DOUBLE, myrank - 1, loop, MPI_COMM_WORLD, &upStat);
+//            MPI_Status downStat;
+//            if (myrank < nproc - 1) MPI_Recv(arr[height - 1] + acc, w, MPI_DOUBLE, myrank + 1, loop, MPI_COMM_WORLD, &downStat);
+//            w -= w;
+//        }
+//    }
+
+    for (int i = 0; i < reqCount; i++) {
+        MPI_Status stat;
+        MPI_Wait(&reqs[i], &stat);
     }
 
     return 0;
@@ -556,12 +587,13 @@ int main(int argc, char **argv)
     while (cont[0]) {
         loop++;
         cont[0] = calculate(in, out, height, width, accuracy);
+        MPI_Request statReq;
+        if (myrank > 0) MPI_Isend(cont, 1, MPI_INT, 0, 0, MPI_COMM_WORLD, &statReq);
         int sendRes = sendAndReceiveResults(out, height, width, myrank, nproc, loop);
         if (sendRes != 0) {
             if (myrank == 0) printf("Error sending results.\n");
             MPI_Abort(MPI_COMM_WORLD, MPI_ERR_UNKNOWN);
         }
-        if (myrank > 0) MPI_Send(cont, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
         double **tmp = in;
         in = out;
         out = tmp;
@@ -573,6 +605,9 @@ int main(int argc, char **argv)
                 if (!tmpVal && cont[0]) tmpVal = 1;
             }
             cont[0] = tmpVal;
+        } else {
+            MPI_Status stat;
+            MPI_Wait(&statReq, &stat);
         }
         MPI_Bcast(cont, 1, MPI_INT, 0, MPI_COMM_WORLD);
     }
@@ -589,6 +624,7 @@ int main(int argc, char **argv)
     freeInnerArrays(out + 1, height - 2);
     free(out);
 
+    // Used for correctness testing
     if (width < 10001) {
         double **final = gatherArray(in, height, width, myrank, nproc);
         if (myrank == 0) {
