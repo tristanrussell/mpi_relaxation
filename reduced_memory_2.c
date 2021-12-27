@@ -350,19 +350,6 @@ int sendAndReceiveResults(double **arr, int height, int width, int myrank, int n
         }
     }
 
-//    while (w > 0) {
-//        if (w > 30000) {
-//            if (myrank > 0) MPI_Send(arr[1] + acc, 30000, MPI_DOUBLE, myrank - 1, loop, MPI_COMM_WORLD);
-//            if (myrank < nproc - 1) MPI_Send(arr[height - 2] + acc, 30000, MPI_DOUBLE, myrank + 1, loop, MPI_COMM_WORLD);
-//            w -= 30000;
-//            acc += 30000;
-//        } else {
-//            if (myrank > 0) MPI_Send(arr[1] + acc, w, MPI_DOUBLE, myrank - 1, loop, MPI_COMM_WORLD);
-//            if (myrank < nproc - 1) MPI_Send(arr[height - 2] + acc, w, MPI_DOUBLE, myrank + 1, loop, MPI_COMM_WORLD);
-//            w -= w;
-//        }
-//    }
-
     w = width;
     acc = 0;
 
@@ -378,23 +365,6 @@ int sendAndReceiveResults(double **arr, int height, int width, int myrank, int n
             w -= w;
         }
     }
-
-//    while (w > 0) {
-//        if (w > 30000) {
-//            MPI_Status upStat;
-//            if (myrank > 0) MPI_Recv(arr[0] + acc, 30000, MPI_DOUBLE, myrank - 1, loop, MPI_COMM_WORLD, &upStat);
-//            MPI_Status downStat;
-//            if (myrank < nproc - 1) MPI_Recv(arr[height - 1] + acc, 30000, MPI_DOUBLE, myrank + 1, loop, MPI_COMM_WORLD, &downStat);
-//            w -= 30000;
-//            acc += 30000;
-//        } else {
-//            MPI_Status upStat;
-//            if (myrank > 0) MPI_Recv(arr[0] + acc, w, MPI_DOUBLE, myrank - 1, loop, MPI_COMM_WORLD, &upStat);
-//            MPI_Status downStat;
-//            if (myrank < nproc - 1) MPI_Recv(arr[height - 1] + acc, w, MPI_DOUBLE, myrank + 1, loop, MPI_COMM_WORLD, &downStat);
-//            w -= w;
-//        }
-//    }
 
     for (int i = 0; i < reqCount; i++) {
         MPI_Status stat;
@@ -574,6 +544,8 @@ int main(int argc, char **argv)
         }
 
         in = distributeArray(original, width, myrank, nproc);
+
+        if (width > 10000) freeArray(original, width);
     } else {
         in = createArray(height, width);
 
@@ -628,7 +600,7 @@ int main(int argc, char **argv)
     }
 
     // Used for correctness testing
-    if (width < 10001) {
+    if (width <= 10000) {
         double **final = gatherArray(in, height, width, myrank, nproc);
         if (myrank == 0) {
             if (final == NULL) {
