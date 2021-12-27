@@ -39,6 +39,17 @@ double **createArray(int height, int width)
     return arr;
 }
 
+double sumArray(double **arr, int height, int width)
+{
+    double sum = 0.0;
+
+    for (int i = 0; i < height; i++) {
+        for (int j = 0; j < width; j++) {
+            sum += arr[i][j];
+        }
+    }
+}
+
 /**
  * Prints out an array of values to the console.
  *
@@ -372,7 +383,7 @@ int sendAndReceiveResults(double **arr, int height, int width, int myrank, int n
     return 0;
 }
 
-double **distributeArray(double **arr, int width, int myrank, int nproc)
+double **distributeArray(double **arr, int width, int nproc)
 {
     int lineCount = (width - 2) / nproc;
     int rowsCovered = lineCount * nproc;
@@ -403,6 +414,174 @@ double **distributeArray(double **arr, int width, int myrank, int nproc)
         }
 
         curr += (currHeight - 2);
+    }
+
+    return retArr;
+}
+
+double **createAndDistributeArray(int width, int nproc)
+{
+    int lineCount = (width - 2) / nproc;
+    int rowsCovered = lineCount * nproc;
+    int rowsLeft = (width - 2) - rowsCovered;
+    int curr = lineCount + 2;
+    if (0 < rowsLeft) curr++;
+
+    double **retArr = createArray(curr, width);
+
+    double max = 10.0;
+    double min = -10.0;
+    double range = (max - min);
+    double div = RAND_MAX / range;
+
+    for (int i = 0; i < width; i++) {
+        retArr[0][i] = min + rand() / div;
+    }
+
+    for (int i = 1; i < curr; i++) {
+        retArr[i][0] = min + rand() / div;
+        retArr[i][width - 1] = min + rand() / div;
+        for (int j = 1; j < width - 1; j++) {
+            retArr[i][j] = 0.0;
+        }
+    }
+
+    if (nproc > 1) sendRow(retArr[curr - 2], width, 1, 0);
+    else return retArr;
+
+    curr--;
+    double *line = (double *) calloc(width, sizeof(double));
+    for (int i = 1; i < width - 1; i++) {
+        line[i] = 0.0;
+    }
+
+    for (int i = 1; i < nproc; i++) {
+        int next = curr + lineCount;
+        if (i < rowsLeft) next++;
+
+        if (i > 1) {
+            line[0] = min + rand() / div;
+            line[width - 1] = min + rand() / div;
+
+            int sendStat = sendRow(line, width, i - 1, 0);
+            if (sendStat != MPI_SUCCESS) {
+                printf("Error sending array.\n");
+                MPI_Abort(MPI_COMM_WORLD, sendStat);
+            }
+            sendStat = sendRow(line, width, i, 0);
+            if (sendStat != MPI_SUCCESS) {
+                printf("Error sending array.\n");
+                MPI_Abort(MPI_COMM_WORLD, sendStat);
+            }
+        }
+
+        curr++;
+
+        for (; curr < next; curr++) {
+            line[0] = min + rand() / div;
+            line[width - 1] = min + rand() / div;
+
+            int sendStat = sendRow(line, width, i, 0);
+            if (sendStat != MPI_SUCCESS) {
+                printf("Error sending array.\n");
+                MPI_Abort(MPI_COMM_WORLD, sendStat);
+            }
+        }
+    }
+
+    for (int i = 0; i < width; i++) {
+        line[i] = min + rand() / div;
+    }
+
+    int sendStat = sendRow(line, width, nproc - 1, 0);
+    if (sendStat != MPI_SUCCESS) {
+        printf("Error sending array.\n");
+        MPI_Abort(MPI_COMM_WORLD, sendStat);
+    }
+
+    free(line);
+
+    return retArr;
+}
+
+double **createAndDistributeArray2(int width, int nproc)
+{
+    int lineCount = (width - 2) / nproc;
+    int rowsCovered = lineCount * nproc;
+    int rowsLeft = (width - 2) - rowsCovered;
+    int currHeight = lineCount + 1;
+    if (0 < rowsLeft) currHeight++;
+    int nextHeight = currHeight + 1;
+
+    double **retArr = createArray(currHeight, width);
+    double *line = (double *) calloc(width, sizeof(double));
+    for (int i = 1; i < width - 1; i++) {
+        line[i] = 0.0;
+    }
+
+    double max = 10.0;
+    double min = -10.0;
+    double range = (max - min);
+    double div = RAND_MAX / range;
+
+    for (int i = 0; i < width; i++) {
+        retArr[0][i] = min + rand() / div;
+    }
+
+    for (int i = 1; i < currHeight; i++) {
+        retArr[i][0] = min + rand() / div;
+        retArr[i][width - 1] = min + rand() / div;
+        for (int j = 1; j < width - 1; j++) {
+            retArr[i][j] = 0.0;
+        }
+    }
+
+    for (int i = 1; i < nproc; i++) {
+        currHeight = lineCount;
+        if (i < rowsLeft) currHeight++;
+
+        for (int j = 0; j < currHeight; j++) {
+            line[0] = min + rand() / div;
+            line[width - 1] = min + rand() / div;
+
+            if (j == 0) {
+                if (i == 1) {
+                    for (int k = 0; k < width; k++) {
+                        retArr[nextHeight][k] = line[k];
+                    }
+                } else {
+                    int sendStat = sendRow(line, width, i - 1, 0);
+                    if (sendStat != MPI_SUCCESS) {
+                        printf("Error sending array.\n");
+                        MPI_Abort(MPI_COMM_WORLD, sendStat);
+                    }
+                }
+            }
+
+            if (j == currHeight - 1 && i != nproc - 1) {
+                int sendStat = sendRow(line, width, i + 1, 0);
+                if (sendStat != MPI_SUCCESS) {
+                    printf("Error sending array.\n");
+                    MPI_Abort(MPI_COMM_WORLD, sendStat);
+                }
+            }
+
+            int sendStat = sendRow(line, width, i, 0);
+            if (sendStat != MPI_SUCCESS) {
+                printf("Error sending array.\n");
+                MPI_Abort(MPI_COMM_WORLD, sendStat);
+            }
+        }
+    }
+
+    for (int i = 0; i < width; i++) {
+        line[i] = min + rand() / div;
+    }
+
+    int sendStat = sendRow(line, width, nproc - 1, 0);
+    if (sendStat != MPI_SUCCESS) {
+        printf("Error sending array.\n");
+        MPI_Abort(MPI_COMM_WORLD, sendStat);
     }
 
     return retArr;
@@ -522,28 +701,30 @@ int main(int argc, char **argv)
     double **original;
 
     if (myrank == 0) {
-        original = createArray(width, width);
+        if (width <= 10000) {
+            original = createArray(width, width);
 
-        double max = 10.0;
-        double min = -10.0;
-        double range = (max - min);
-        double div = RAND_MAX / range;
+            double max = 10.0;
+            double min = -10.0;
+            double range = (max - min);
+            double div = RAND_MAX / range;
 
-        for (int i = 0; i < width; i++) {
-            original[0][i] = min + rand() / div;
-            original[width - 1][i] = min + rand() / div;
-        }
-        for (int i = 1; i < width - 1; i++) {
-            original[i][0] = min + rand() / div;
-            original[i][width - 1] = min + rand() / div;
-            for (int j = 1; j < width - 1; j++) {
-                original[i][j] = 0.0;
+            for (int i = 0; i < width; i++) {
+                original[0][i] = min + rand() / div;
+                original[width - 1][i] = min + rand() / div;
             }
+            for (int i = 1; i < width - 1; i++) {
+                original[i][0] = min + rand() / div;
+                original[i][width - 1] = min + rand() / div;
+                for (int j = 1; j < width - 1; j++) {
+                    original[i][j] = 0.0;
+                }
+            }
+
+            in = distributeArray(original, width, nproc);
+        } else {
+            in = createAndDistributeArray2(width, nproc);
         }
-
-        in = distributeArray(original, width, myrank, nproc);
-
-        if (width > 10000) freeArray(original, width);
     } else {
         in = createArray(height, width);
 
@@ -595,6 +776,7 @@ int main(int argc, char **argv)
         printf("Microseconds:%lu\n",
                (unsigned long) (((end.tv_sec - begin.tv_sec) * 1e6) +
                                 ((end.tv_nsec - begin.tv_nsec) / 1e3)));
+        printf("Sum: %1.5f\n", sumArray(in, height, width));
     }
 
     // Used for correctness testing

@@ -39,6 +39,17 @@ double **createArray(int height, int width)
     return arr;
 }
 
+double sumArray(double **arr, int height, int width)
+{
+    double sum = 0.0;
+
+    for (int i = 0; i < height; i++) {
+        for (int j = 0; j < width; j++) {
+            sum += arr[i][j];
+        }
+    }
+}
+
 /**
  * Prints out an array of values to the console.
  *
@@ -533,7 +544,6 @@ int main(int argc, char **argv)
 
         for (int i = 0; i < width; i++) {
             original[0][i] = min + rand() / div;
-            original[width - 1][i] = min + rand() / div;
         }
         for (int i = 1; i < width - 1; i++) {
             original[i][0] = min + rand() / div;
@@ -541,6 +551,9 @@ int main(int argc, char **argv)
             for (int j = 1; j < width - 1; j++) {
                 original[i][j] = 0.0;
             }
+        }
+        for (int i = 0; i < width; i++) {
+            original[width - 1][i] = min + rand() / div;
         }
 
         in = distributeArray(original, width, myrank, nproc);
@@ -597,6 +610,7 @@ int main(int argc, char **argv)
         printf("Microseconds:%lu\n",
                (unsigned long) (((end.tv_sec - begin.tv_sec) * 1e6) +
                                 ((end.tv_nsec - begin.tv_nsec) / 1e3)));
+        printf("Sum: %1.5f\n", sumArray(in, height, width));
     }
 
     // Used for correctness testing
