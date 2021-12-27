@@ -224,21 +224,42 @@ RESULT *seq(double **in, int height, int width, double accuracy) {
  * @param accuracy : The accuracy to work to.
  * @return : Whether any values changed by more than the accuracy.
  */
-int calculate(double **in, double **out, int height, int width, double accuracy)
+int calculate(double **in, int height, int width, double accuracy)
 {
+    double *line = (double *) calloc(width,sizeof(double));
     int changed = 0;
-    for (int i = 1; i < height - 1; i++) {
+
+    line[0] = in[1][0];
+    line[width - 1] = in[1][width - 1];
+    for (int i = 1; i < width - 1; i++) {
+        double val = (in[0][i] + in[2][i] + in[1][i - 1] + in[1][i + 1]) / 4;
+        line[i] = val;
+
+        if (!changed && (fabs((val - in[1][i])) > accuracy)) changed = 1;
+    }
+
+    double *tmp = in[1];
+    in[1] = line;
+    line = tmp;
+
+    for (int i = 2; i < height - 1; i++) {
+        line[0] = in[i][0];
+        line[width - 1] = in[i][width - 1];
+
         for (int j = 1; j < width - 1; j++) {
-            double val = in[i - 1][j];
-            val += in[i + 1][j];
-            val += in[i][j - 1];
-            val += in[i][j + 1];
-            val /= 4;
-            out[i][j] = val;
+            double val = (line[j] + in[i + 1][j] + in[i][j - 1] + in[i][j + 1]) / 4;
+            line[j] = val;
 
             if (!changed && (fabs((val - in[i][j])) > accuracy)) changed = 1;
         }
+
+        tmp = in[i];
+        in[i] = line;
+        line = tmp;
     }
+
+    free(line);
+
     return changed;
 }
 
@@ -530,7 +551,6 @@ int main(int argc, char **argv)
     if (myrank < rowsLeft) height++;
 
     double **in;
-    double **out;
     double **original;
 
     if (myrank == 0) {
@@ -566,17 +586,6 @@ int main(int argc, char **argv)
         }
     }
 
-    out = createArray(height, width);
-    free(out[0]);
-    free(out[height - 1]);
-    out[0] = in[0];
-    out[height - 1] = in[height - 1];
-
-    for (int i = 1; i < height - 1; i++) {
-        out[i][0] = in[i][0];
-        out[i][width - 1] = in[i][width - 1];
-    }
-
     int cont[1];
     cont[0] = 1;
     int loop = 0;
@@ -586,17 +595,14 @@ int main(int argc, char **argv)
 
     while (cont[0]) {
         loop++;
-        cont[0] = calculate(in, out, height, width, accuracy);
+        cont[0] = calculate(in, height, width, accuracy);
         MPI_Request statReq;
         if (myrank > 0) MPI_Isend(cont, 1, MPI_INT, 0, 0, MPI_COMM_WORLD, &statReq);
-        int sendRes = sendAndReceiveResults(out, height, width, myrank, nproc, loop);
+        int sendRes = sendAndReceiveResults(in, height, width, myrank, nproc, loop);
         if (sendRes != 0) {
             if (myrank == 0) printf("Error sending results.\n");
             MPI_Abort(MPI_COMM_WORLD, MPI_ERR_UNKNOWN);
         }
-        double **tmp = in;
-        in = out;
-        out = tmp;
         if (myrank == 0) {
             int tmpVal = cont[0];
             for (int i = 1; i < nproc; i++) {
@@ -620,9 +626,6 @@ int main(int argc, char **argv)
                (unsigned long) (((end.tv_sec - begin.tv_sec) * 1e6) +
                                 ((end.tv_nsec - begin.tv_nsec) / 1e3)));
     }
-
-    freeInnerArrays(out + 1, height - 2);
-    free(out);
 
     // Used for correctness testing
     if (width < 10001) {
