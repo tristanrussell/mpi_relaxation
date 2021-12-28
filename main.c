@@ -699,7 +699,6 @@ int main(int argc, char **argv)
         printf("Microseconds:%lu\n",
                (unsigned long) (((end.tv_sec - begin.tv_sec) * 1e6) +
                                 ((end.tv_nsec - begin.tv_nsec) / 1e3)));
-        printf("Sum: %1.5f\n", sumArray(in, height, width));
     }
 
     // Used for correctness testing
@@ -720,10 +719,14 @@ int main(int argc, char **argv)
             if (cmpRes) printf("Array comparison failed.\n");
             else printf("Array comparison succeeded.\n");
 
+            printf("Sum: %1.5f\n", sumArray(final, width, width));
+
             freeArray(final, width);
             freeArray(res->arr, width);
             free(res);
         }
+    } else if (myrank == 0) {
+        printf("Sum: %1.5f\n", sumArray(in, height, width));
     }
 
     freeArray(in, height);
