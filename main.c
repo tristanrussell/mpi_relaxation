@@ -424,96 +424,11 @@ double **createAndDistributeArray(int width, int nproc)
     int lineCount = (width - 2) / nproc;
     int rowsCovered = lineCount * nproc;
     int rowsLeft = (width - 2) - rowsCovered;
-    int curr = lineCount + 2;
-    if (0 < rowsLeft) curr++;
-
-    double **retArr = createArray(curr, width);
-
-    double max = 10.0;
-    double min = -10.0;
-    double range = (max - min);
-    double div = RAND_MAX / range;
-
-    for (int i = 0; i < width; i++) {
-        retArr[0][i] = min + rand() / div;
-    }
-
-    for (int i = 1; i < curr; i++) {
-        retArr[i][0] = min + rand() / div;
-        retArr[i][width - 1] = min + rand() / div;
-        for (int j = 1; j < width - 1; j++) {
-            retArr[i][j] = 0.0;
-        }
-    }
-
-    if (nproc > 1) sendRow(retArr[curr - 2], width, 1, 0);
-    else return retArr;
-
-    curr--;
-    double *line = (double *) calloc(width, sizeof(double));
-    for (int i = 1; i < width - 1; i++) {
-        line[i] = 0.0;
-    }
-
-    for (int i = 1; i < nproc; i++) {
-        int next = curr + lineCount;
-        if (i < rowsLeft) next++;
-
-        if (i > 1) {
-            line[0] = min + rand() / div;
-            line[width - 1] = min + rand() / div;
-
-            int sendStat = sendRow(line, width, i - 1, 0);
-            if (sendStat != MPI_SUCCESS) {
-                printf("Error sending array.\n");
-                MPI_Abort(MPI_COMM_WORLD, sendStat);
-            }
-            sendStat = sendRow(line, width, i, 0);
-            if (sendStat != MPI_SUCCESS) {
-                printf("Error sending array.\n");
-                MPI_Abort(MPI_COMM_WORLD, sendStat);
-            }
-        }
-
-        curr++;
-
-        for (; curr < next; curr++) {
-            line[0] = min + rand() / div;
-            line[width - 1] = min + rand() / div;
-
-            int sendStat = sendRow(line, width, i, 0);
-            if (sendStat != MPI_SUCCESS) {
-                printf("Error sending array.\n");
-                MPI_Abort(MPI_COMM_WORLD, sendStat);
-            }
-        }
-    }
-
-    for (int i = 0; i < width; i++) {
-        line[i] = min + rand() / div;
-    }
-
-    int sendStat = sendRow(line, width, nproc - 1, 0);
-    if (sendStat != MPI_SUCCESS) {
-        printf("Error sending array.\n");
-        MPI_Abort(MPI_COMM_WORLD, sendStat);
-    }
-
-    free(line);
-
-    return retArr;
-}
-
-double **createAndDistributeArray2(int width, int nproc)
-{
-    int lineCount = (width - 2) / nproc;
-    int rowsCovered = lineCount * nproc;
-    int rowsLeft = (width - 2) - rowsCovered;
     int currHeight = lineCount + 1;
     if (0 < rowsLeft) currHeight++;
-    int nextHeight = currHeight + 1;
+    int nextHeight = currHeight;
 
-    double **retArr = createArray(currHeight, width);
+    double **retArr = createArray(currHeight + 1, width);
     double *line = (double *) calloc(width, sizeof(double));
     for (int i = 1; i < width - 1; i++) {
         line[i] = 0.0;
@@ -533,6 +448,14 @@ double **createAndDistributeArray2(int width, int nproc)
         retArr[i][width - 1] = min + rand() / div;
         for (int j = 1; j < width - 1; j++) {
             retArr[i][j] = 0.0;
+        }
+    }
+
+    if (nproc > 1) {
+        int sendStat = sendRow(retArr[currHeight - 1], width, 1, 0);
+        if (sendStat != MPI_SUCCESS) {
+            printf("Error sending array.\n");
+            MPI_Abort(MPI_COMM_WORLD, sendStat);
         }
     }
 
@@ -723,7 +646,7 @@ int main(int argc, char **argv)
 
             in = distributeArray(original, width, nproc);
         } else {
-            in = createAndDistributeArray2(width, nproc);
+            in = createAndDistributeArray(width, nproc);
         }
     } else {
         in = createArray(height, width);
