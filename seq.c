@@ -208,6 +208,7 @@ int main(int argc, char **argv)
         arr2[i][width - 1] = arr[i][width - 1];
     }
 
+    double *line = (double *) calloc(width,sizeof(double));
     int changed = 1;
     int loop = 0;
 
@@ -218,25 +219,39 @@ int main(int argc, char **argv)
         changed = 0;
         loop++;
 
-        for (int i = 1; i < height - 1; i++) {
+        line[0] = arr[1][0];
+        line[width - 1] = arr[1][width - 1];
+        for (int i = 1; i < width - 1; i++) {
+            double val = (arr[0][i] + arr[2][i] + arr[1][i - 1] + arr[1][i + 1]) / 4;
+            line[i] = val;
+
+            if (!changed && (fabs((val - arr[1][i])) > accuracy)) changed = 1;
+        }
+
+        double *tmp = arr[1];
+        arr[1] = line;
+        line = tmp;
+
+        for (int i = 2; i < height - 1; i++) {
+            line[0] = arr[i][0];
+            line[width - 1] = arr[i][width - 1];
+
             for (int j = 1; j < width - 1; j++) {
-                double val = arr[i - 1][j];
-                val += arr[i + 1][j];
-                val += arr[i][j - 1];
-                val += arr[i][j + 1];
-                val /= 4;
-                arr2[i][j] = val;
+                double val = (line[j] + arr[i + 1][j] + arr[i][j - 1] + arr[i][j + 1]) / 4;
+                line[j] = val;
 
                 if (!changed && (fabs((val - arr[i][j])) > accuracy)) changed = 1;
             }
-        }
 
-        double **tmp = arr;
-        arr = arr2;
-        arr2 = tmp;
+            tmp = arr[i];
+            arr[i] = line;
+            line = tmp;
+        }
     }
 
     clock_gettime(CLOCK_MONOTONIC, &end);
+
+    free(line);
 
     freeInnerArrays(arr2 + 1, height - 2);
     free(arr2);
