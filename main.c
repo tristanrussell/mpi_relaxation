@@ -419,7 +419,7 @@ double **distributeArray(double **arr, int width, int nproc)
     return retArr;
 }
 
-double **createAndDistributeArray(int width, int nproc)
+double **createAndDistributeArray(int width, int nproc, double accuracy)
 {
     int lineCount = (width - 2) / nproc;
     int rowsCovered = lineCount * nproc;
@@ -434,8 +434,14 @@ double **createAndDistributeArray(int width, int nproc)
         line[i] = 0.0;
     }
 
-    double max = 10.0;
-    double min = -10.0;
+    // For scalability testing, this was set as +-10, this reduces the
+    // number of loops required, so we can see the effect of the
+    // parallelism.
+
+    // These default values should result in the values settling
+    // roughly as the centre of the array becomes non-zero.
+    double max = (width / 2) * accuracy;
+    double min = 0 - max;
     double range = (max - min);
     double div = RAND_MAX / range;
 
@@ -627,8 +633,14 @@ int main(int argc, char **argv)
         if (width <= 10000) {
             original = createArray(width, width);
 
-            double max = 10.0;
-            double min = -10.0;
+            // For scalability testing, this was set as +-10, this reduces the
+            // number of loops required, so we can see the effect of the
+            // parallelism.
+
+            // These default values should result in the values settling
+            // roughly as the centre of the array becomes non-zero.
+            double max = (width / 2) * accuracy;
+            double min = 0 - max;
             double range = (max - min);
             double div = RAND_MAX / range;
 
@@ -646,7 +658,7 @@ int main(int argc, char **argv)
 
             in = distributeArray(original, width, nproc);
         } else {
-            in = createAndDistributeArray(width, nproc);
+            in = createAndDistributeArray(width, nproc, accuracy);
         }
     } else {
         in = createArray(height, width);
