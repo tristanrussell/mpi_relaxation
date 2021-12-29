@@ -242,9 +242,12 @@ RESULT *seq(double **in, int height, int width, double accuracy) {
  */
 int calculate(double **in, int height, int width, double accuracy)
 {
+    // This stores the line of new values being inserted into the sub-array
     double *line = (double *) calloc(width,sizeof(double));
     int changed = 0;
 
+    // Calculating the first new row as it is handled differently to the other
+    // rows.
     line[0] = in[1][0];
     line[width - 1] = in[1][width - 1];
     for (int i = 1; i < width - 1; i++) {
@@ -254,21 +257,28 @@ int calculate(double **in, int height, int width, double accuracy)
         if (!changed && (fabs((val - in[1][i])) > accuracy)) changed = 1;
     }
 
+    // Swapping the new top row into the array. Reusing the row that was
+    // removed so that we don't need to allocate new memory.
     double *tmp = in[1];
     in[1] = line;
     line = tmp;
 
+    // Calculating the rest of the rows.
     for (int i = 2; i < height - 1; i++) {
         line[0] = in[i][0];
         line[width - 1] = in[i][width - 1];
 
         for (int j = 1; j < width - 1; j++) {
-            double val = (line[j] + in[i + 1][j] + in[i][j - 1] + in[i][j + 1]) / 4;
+            // The line hold the old values from the row it replaced which we
+            // now use for calculating the cells below it.
+            double val = line[j] + in[i + 1][j] + in[i][j - 1] + in[i][j + 1];
+            val /= 4;
             line[j] = val;
 
             if (!changed && (fabs((val - in[i][j])) > accuracy)) changed = 1;
         }
 
+        // Swapping the new row with the row being replaced.
         tmp = in[i];
         in[i] = line;
         line = tmp;
@@ -279,6 +289,14 @@ int calculate(double **in, int height, int width, double accuracy)
     return changed;
 }
 
+/**
+ * Sends a row of values accounting for the
+ * @param row
+ * @param width
+ * @param dest
+ * @param tag
+ * @return
+ */
 int sendRow(double *row, int width, int dest, int tag)
 {
     int w = width;
@@ -390,6 +408,18 @@ int sendAndReceiveResults(double **arr, int height, int width, int myrank, int n
     return 0;
 }
 
+/**
+ * Gathers all of the rows from non-zero processes and builds the final array
+ * on process 0.
+ *
+ * @param arr : The sub-array computed by the current process.
+ * @param height : The height of the sub-array.
+ * @param width : The width of the sub-array.
+ * @param myrank : The rank of the current process.
+ * @param nproc : The number of processes in total.
+ * @return : If the current process is process 0 then this will be the final
+ *           array, otherwise NULL is returned.
+ */
 double **gatherArray(double **arr, int height, int width, int myrank, int nproc)
 {
     double **retArr;
