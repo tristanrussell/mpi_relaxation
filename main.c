@@ -15,6 +15,10 @@ typedef struct arguments {
     int randSeed;
 } ARGUMENTS;
 
+/**
+ * The structure used for carrying the result of the sequential version of the
+ * program.
+ */
 typedef struct result {
     int loop;
     double **arr;
@@ -23,7 +27,9 @@ typedef struct result {
 /**
  * Builds a 2d array of zeros.
  *
- * @return : The 2d array of zeros.
+ * @param height : The height of the array to build.
+ * @param width : The width of the array to build.
+ * @return : The 2d array, filled with zeros.
  */
 double **createArray(int height, int width)
 {
@@ -39,6 +45,14 @@ double **createArray(int height, int width)
     return arr;
 }
 
+/**
+ * Sums all of the values in a 2d array.
+ *
+ * @param arr : The array to sum.
+ * @param height : The height of the array.
+ * @param width : The width of the array.
+ * @return : The sum of the array.
+ */
 double sumArray(double **arr, int height, int width)
 {
     double sum = 0.0;
@@ -67,6 +81,12 @@ void printArray(double **arr, int height, int width)
     }
 }
 
+/**
+ * Frees only the rows of a 2d array, not the array of pointers to those rows.
+ *
+ * @param arr : The array to free the rows of.
+ * @param height : The height of the array.
+ */
 void freeInnerArrays(double **arr, int height)
 {
     for (int i = 0; i < height; i++) {
@@ -74,12 +94,28 @@ void freeInnerArrays(double **arr, int height)
     }
 }
 
+/**
+ * Frees a 2d array.
+ *
+ * @param arr : The array to free.
+ * @param height : The height of the array.
+ */
 void freeArray(double **arr, int height)
 {
     freeInnerArrays(arr, height);
     free(arr);
 }
 
+/**
+ * Compares cell by cell, the values in two arrays. The arrays must be the same
+ * height and width.
+ *
+ * @param arr1 : The first array to compare.
+ * @param arr2 : The second array to compare to.
+ * @param height : The height of the arrays.
+ * @param width : The width of the arrays.
+ * @return : 0 if the arrays are equal, 1 otherwise.
+ */
 int compareArrays(double **arr1, double **arr2, int height, int width)
 {
     for (int i = 0; i < height; i++) {
@@ -290,12 +326,14 @@ int calculate(double **in, int height, int width, double accuracy)
 }
 
 /**
- * Sends a row of values accounting for the
- * @param row
- * @param width
- * @param dest
- * @param tag
- * @return
+ * Sends a row of values to the destination process with a given tag. The row
+ * will be divided into chunks of 30000 if it has a width larger than 30000.
+ *
+ * @param row : The row to send.
+ * @param width : The width of the row.
+ * @param dest : The destination process to send the row to.
+ * @param tag : The tag for the send message.
+ * @return : An error status if a send message failed or success otherwise.
  */
 int sendRow(double *row, int width, int dest, int tag)
 {
@@ -319,6 +357,17 @@ int sendRow(double *row, int width, int dest, int tag)
     return MPI_SUCCESS;
 }
 
+/**
+ * Receives a row of values from the destination process with a given tag. The
+ * receive will be divided into chunks of 30000 if the row being received has a
+ * width larger than 30000.
+ *
+ * @param row : The row to place the received values into.
+ * @param width : The width of the row.
+ * @param dest : The destination process to receive the row from.
+ * @param tag : The tag of the message being received.
+ * @return : An error status if a receive failed or success otherwise.
+ */
 int receiveRow(double *row, int width, int dest, int tag)
 {
     int w = width;
