@@ -115,6 +115,8 @@ ARGUMENTS *processArgs(int argc, char *argv[]) {
     ar->accuracy = 0.01;
     ar->randSeed = time(NULL);
 
+    int randSet = 0;
+
     char *sizeStr = "-size=";
     char *sStr = "-s=";
     char *accStr = "-accuracy=";
@@ -155,6 +157,7 @@ ARGUMENTS *processArgs(int argc, char *argv[]) {
             ar->accuracy = strtod(val, (char**)NULL);
         }
         if (len > 6 && strncmp(argv[i], seedStr, 6) == 0) {
+            randSet = 1;
             char val[len - 5];
             for (int j = 6; j < len; j++) {
                 val[j - 6] = argv[i][j];
@@ -162,6 +165,10 @@ ARGUMENTS *processArgs(int argc, char *argv[]) {
             val[len - 6] = '\0';
             ar->randSeed = (int) strtoll(val, (char**)NULL, 10);
         }
+    }
+
+    if (!randSet) {
+        MPI_Bcast(&ar->randSeed, 1, MPI_INT, 0, MPI_COMM_WORLD);
     }
 
     return ar;
@@ -383,139 +390,6 @@ int sendAndReceiveResults(double **arr, int height, int width, int myrank, int n
     return 0;
 }
 
-double **distributeArray(double **arr, int width, int nproc)
-{
-    int lineCount = (width - 2) / nproc;
-    int rowsCovered = lineCount * nproc;
-    int rowsLeft = (width - 2) - rowsCovered;
-    int height = lineCount + 2;
-    int currHeight = height;
-    if (0 < rowsLeft) currHeight++;
-
-    double **retArr = createArray(currHeight, width);
-
-    for (int i = 0; i < currHeight; i++) {
-        for (int j = 0; j < width; j++) {
-            retArr[i][j] = arr[i][j];
-        }
-    }
-
-    int curr = currHeight - 1;
-    for (int i = 1; i < nproc; i++) {
-        currHeight = height;
-        if (i < rowsLeft) currHeight++;
-
-        for (int j = -1; j < currHeight - 1; j++) {
-            int sendStat = sendRow(arr[curr + j], width, i, 0);
-            if (sendStat != MPI_SUCCESS) {
-                printf("Error receiving array.\n");
-                MPI_Abort(MPI_COMM_WORLD, sendStat);
-            }
-        }
-
-        curr += (currHeight - 2);
-    }
-
-    return retArr;
-}
-
-double **createAndDistributeArray(int width, int nproc, double accuracy)
-{
-    int lineCount = (width - 2) / nproc;
-    int rowsCovered = lineCount * nproc;
-    int rowsLeft = (width - 2) - rowsCovered;
-    int currHeight = lineCount + 1;
-    if (0 < rowsLeft) currHeight++;
-    int nextHeight = currHeight;
-
-    double **retArr = createArray(currHeight + 1, width);
-    double *line = (double *) calloc(width, sizeof(double));
-    for (int i = 1; i < width - 1; i++) {
-        line[i] = 0.0;
-    }
-
-    // For scalability testing, this was set as +-10, this reduces the
-    // number of loops required, so we can see the effect of the
-    // parallelism.
-
-    // These default values should result in the values settling
-    // roughly as the centre of the array becomes non-zero.
-    double max = (width / 2) * accuracy;
-    double min = 0 - max;
-    double range = (max - min);
-    double div = RAND_MAX / range;
-
-    for (int i = 0; i < width; i++) {
-        retArr[0][i] = min + rand() / div;
-    }
-
-    for (int i = 1; i < currHeight; i++) {
-        retArr[i][0] = min + rand() / div;
-        retArr[i][width - 1] = min + rand() / div;
-        for (int j = 1; j < width - 1; j++) {
-            retArr[i][j] = 0.0;
-        }
-    }
-
-    if (nproc > 1) {
-        int sendStat = sendRow(retArr[currHeight - 1], width, 1, 0);
-        if (sendStat != MPI_SUCCESS) {
-            printf("Error sending array.\n");
-            MPI_Abort(MPI_COMM_WORLD, sendStat);
-        }
-    }
-
-    for (int i = 1; i < nproc; i++) {
-        currHeight = lineCount;
-        if (i < rowsLeft) currHeight++;
-
-        for (int j = 0; j < currHeight; j++) {
-            line[0] = min + rand() / div;
-            line[width - 1] = min + rand() / div;
-
-            if (j == 0) {
-                if (i == 1) {
-                    for (int k = 0; k < width; k++) {
-                        retArr[nextHeight][k] = line[k];
-                    }
-                } else {
-                    int sendStat = sendRow(line, width, i - 1, 0);
-                    if (sendStat != MPI_SUCCESS) {
-                        printf("Error sending array.\n");
-                        MPI_Abort(MPI_COMM_WORLD, sendStat);
-                    }
-                }
-            }
-
-            if (j == currHeight - 1 && i != nproc - 1) {
-                int sendStat = sendRow(line, width, i + 1, 0);
-                if (sendStat != MPI_SUCCESS) {
-                    printf("Error sending array.\n");
-                    MPI_Abort(MPI_COMM_WORLD, sendStat);
-                }
-            }
-
-            int sendStat = sendRow(line, width, i, 0);
-            if (sendStat != MPI_SUCCESS) {
-                printf("Error sending array.\n");
-                MPI_Abort(MPI_COMM_WORLD, sendStat);
-            }
-        }
-    }
-
-    for (int i = 0; i < width; i++) {
-        line[i] = min + rand() / div;
-    }
-
-    int sendStat = sendRow(line, width, nproc - 1, 0);
-    if (sendStat != MPI_SUCCESS) {
-        printf("Error sending array.\n");
-        MPI_Abort(MPI_COMM_WORLD, sendStat);
-    }
-
-    return retArr;
-}
-
 double **gatherArray(double **arr, int height, int width, int myrank, int nproc)
 {
     double **retArr;
@@ -626,48 +500,95 @@ int main(int argc, char **argv)
     int height = lineCount + 2;
     if (myrank < rowsLeft) height++;
 
-    double **in;
+    int start;
+    if (myrank == 0) start = 0;
+    else if (myrank < rowsLeft) start = (lineCount * myrank) + myrank;
+    else start = (lineCount * myrank) + rowsLeft;
+
+    // For scalability testing, this was set as +-10, this reduces the number
+    // of loops required, so we can see the effect of the parallelism.
+
+    // These default values should result in the values settling roughly as the
+    // centre of the array becomes non-zero.
+    double randMax = 10.0;
+    double randMin = -10.0;
+    double randRange = (randMax - randMin);
+    double randDiv = RAND_MAX / randRange;
+
+    double **in = createArray(height, width);
     double **original;
 
     if (myrank == 0) {
         if (width <= 10000) {
             original = createArray(width, width);
 
-            // For scalability testing, this was set as +-10, this reduces the
-            // number of loops required, so we can see the effect of the
-            // parallelism.
-
-            // These default values should result in the values settling
-            // roughly as the centre of the array becomes non-zero.
-            double max = (width / 2) * accuracy;
-            double min = 0 - max;
-            double range = (max - min);
-            double div = RAND_MAX / range;
-
             for (int i = 0; i < width; i++) {
-                original[0][i] = min + rand() / div;
-                original[width - 1][i] = min + rand() / div;
+                original[0][i] = randMin + rand() / randDiv;
             }
             for (int i = 1; i < width - 1; i++) {
-                original[i][0] = min + rand() / div;
-                original[i][width - 1] = min + rand() / div;
+                original[i][0] = randMin + rand() / randDiv;
+                original[i][width - 1] = randMin + rand() / randDiv;
                 for (int j = 1; j < width - 1; j++) {
                     original[i][j] = 0.0;
                 }
             }
+            for (int i = 0; i < width; i++) {
+                original[width - 1][i] = randMin + rand() / randDiv;
+            }
 
-            in = distributeArray(original, width, nproc);
+            for (int i = 0; i < height; i++) {
+                for (int j = 0; j < width; j++) {
+                    in[i][j] = original[i][j];
+                }
+            }
         } else {
-            in = createAndDistributeArray(width, nproc, accuracy);
+            for (int i = 0; i < width; i++) {
+                in[0][i] = randMin + rand() / randDiv;
+            }
+            for (int i = 1; i < height - 1; i++) {
+                in[i][0] = randMin + rand() / randDiv;
+                in[i][width - 1] = randMin + rand() / randDiv;
+                for (int j = 1; j < width - 1; j++) {
+                    in[i][j] = 0.0;
+                }
+            }
+            if (nproc == 1) {
+                for (int i = 0; i < width; i++) {
+                    in[height - 1][i] = randMin + rand() / randDiv;
+                }
+            } else {
+                in[height - 1][0] = randMin + rand() / randDiv;
+                in[height - 1][width - 1] = randMin + rand() / randDiv;
+                for (int i = 1; i < width - 1; i++) {
+                    in[height - 1][i] = 0.0;
+                }
+            }
         }
     } else {
-        in = createArray(height, width);
+        for (int i = 0; i < width; i++) {
+            rand();
+        }
+        for (int i = 1; i < start; i++) {
+            rand();
+            rand();
+        }
+        for (int i = 0; i < height - 1; i++) {
+            in[i][0] = randMin + rand() / randDiv;
+            in[i][width - 1] = randMin + rand() / randDiv;
+            for (int j = 1; j < width - 1; j++) {
+                in[i][j] = 0.0;
+            }
+        }
 
-        for (int i = 0; i < height; i++) {
-            int recvStat = receiveRow(in[i], width, 0, 0);
-            if (recvStat != MPI_SUCCESS) {
-                printf("Error receiving array.\n");
-                MPI_Abort(MPI_COMM_WORLD, recvStat);
+        if (myrank == nproc - 1) {
+            for (int i = 0; i < width; i++) {
+                in[height - 1][i] = randMin + rand() / randDiv;
+            }
+        } else {
+            in[height - 1][0] = randMin + rand() / randDiv;
+            in[height - 1][width - 1] = randMin + rand() / randDiv;
+            for (int i = 1; i < width - 1; i++) {
+                in[height - 1][i] = 0.0;
             }
         }
     }
