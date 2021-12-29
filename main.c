@@ -589,8 +589,8 @@ int main(int argc, char **argv)
 
     // These default values should result in the values settling roughly as the
     // centre of the array becomes non-zero.
-    double randMax = 10.0;
-    double randMin = -10.0;
+    double randMax = (width / 2) * accuracy;
+    double randMin = 0 - randMax;
     double randRange = (randMax - randMin);
     double randDiv = RAND_MAX / randRange;
 
