@@ -595,8 +595,9 @@ int main(int argc, char **argv)
     double randDiv = RAND_MAX / randRange;
 
     double **in = createArray(height, width);
-    double **original;
+    double **original; // Used for correctness testing on small arrays
 
+    // Building the initial array
     if (myrank == 0) {
         if (width <= 10000) {
             original = createArray(width, width);
@@ -682,13 +683,19 @@ int main(int argc, char **argv)
     while (cont[0]) {
         loop++;
         cont[0] = calculate(in, height, width, accuracy);
+
         MPI_Request statReq;
-        if (myrank > 0) MPI_Isend(cont, 1, MPI_INT, 0, 0, MPI_COMM_WORLD, &statReq);
-        int sendRes = sendAndReceiveResults(in, height, width, myrank, nproc, loop);
+        if (myrank > 0)
+            MPI_Isend(cont, 1, MPI_INT, 0, 0, MPI_COMM_WORLD, &statReq);
+
+        int sendRes = sendAndReceiveResults(
+                in, height, width, myrank, nproc, loop);
+
         if (sendRes != 0) {
             if (myrank == 0) printf("Error sending results.\n");
             MPI_Abort(MPI_COMM_WORLD, MPI_ERR_UNKNOWN);
         }
+
         if (myrank == 0) {
             int tmpVal = cont[0];
             for (int i = 1; i < nproc; i++) {
@@ -738,6 +745,8 @@ int main(int argc, char **argv)
             free(res);
         }
     } else if (myrank == 0) {
+        // Only useful for checking the sums of two identical runs; same array,
+        // same processor count. Left as an additional correctness check.
         printf("Sum: %1.5f\n", sumArray(in, height, width));
     }
 
