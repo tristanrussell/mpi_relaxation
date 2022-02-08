@@ -11,31 +11,25 @@
  */
 typedef struct arguments {
     int size;
-    double accuracy;
+    float accuracy;
     int randSeed;
 } ARGUMENTS;
 
-/**
- * The structure used for carrying the result of the sequential version of the
- * program.
- */
 typedef struct result {
     int loop;
-    double **arr;
+    float **arr;
 } RESULT;
 
 /**
  * Builds a 2d array of zeros.
  *
- * @param height : The height of the array to build.
- * @param width : The width of the array to build.
- * @return : The 2d array, filled with zeros.
+ * @return : The 2d array of zeros.
  */
-double **createArray(int height, int width)
+float **createArray(int height, int width)
 {
-    double **arr = (double**)malloc((unsigned long)height * sizeof(double*));
+    float **arr = (float**)malloc((unsigned long)height * sizeof(float*));
     for (int i = 0; i < height; i++) {
-        arr[i] = (double*)calloc(width, sizeof(double));
+        arr[i] = (float*)calloc(width, sizeof(float));
 
         for (int j = 0; j < width; j++) {
             arr[i][j] = 0.00;
@@ -45,17 +39,9 @@ double **createArray(int height, int width)
     return arr;
 }
 
-/**
- * Sums all of the values in a 2d array.
- *
- * @param arr : The array to sum.
- * @param height : The height of the array.
- * @param width : The width of the array.
- * @return : The sum of the array.
- */
-double sumArray(double **arr, int height, int width)
+float sumArray(float **arr, int height, int width)
 {
-    double sum = 0.0;
+    float sum = 0.0;
 
     for (int i = 0; i < height; i++) {
         for (int j = 0; j < width; j++) {
@@ -71,7 +57,7 @@ double sumArray(double **arr, int height, int width)
  * @param height : The height of the array.
  * @param width : The width of the array.
  */
-void printArray(double **arr, int height, int width)
+void printArray(float **arr, int height, int width)
 {
     for (int i = 0; i < height; i++) {
         for (int j = 0; j < width; j++) {
@@ -81,42 +67,20 @@ void printArray(double **arr, int height, int width)
     }
 }
 
-/**
- * Frees only the rows of a 2d array, not the array of pointers to those rows.
- *
- * @param arr : The array to free the rows of.
- * @param height : The height of the array.
- */
-void freeInnerArrays(double **arr, int height)
+void freeInnerArrays(float **arr, int height)
 {
     for (int i = 0; i < height; i++) {
         free(arr[i]);
     }
 }
 
-/**
- * Frees a 2d array.
- *
- * @param arr : The array to free.
- * @param height : The height of the array.
- */
-void freeArray(double **arr, int height)
+void freeArray(float **arr, int height)
 {
     freeInnerArrays(arr, height);
     free(arr);
 }
 
-/**
- * Compares cell by cell, the values in two arrays. The arrays must be the same
- * height and width.
- *
- * @param arr1 : The first array to compare.
- * @param arr2 : The second array to compare to.
- * @param height : The height of the arrays.
- * @param width : The width of the arrays.
- * @return : 0 if the arrays are equal, 1 otherwise.
- */
-int compareArrays(double **arr1, double **arr2, int height, int width)
+int compareArrays(float **arr1, float **arr2, int height, int width)
 {
     for (int i = 0; i < height; i++) {
         for (int j = 0; j < width; j++) {
@@ -219,9 +183,9 @@ ARGUMENTS *processArgs(int argc, char *argv[]) {
  * @param accuracy : The accuracy to work to.
  * @return : The number of loops completed.
  */
-RESULT *seq(double **in, int height, int width, double accuracy) {
-    double **arr = in;
-    double **arr2 = createArray(height, width);
+RESULT *seq(float **in, int height, int width, float accuracy) {
+    float **arr = in;
+    float **arr2 = createArray(height, width);
 
     free(arr2[0]);
     free(arr2[height - 1]);
@@ -242,7 +206,7 @@ RESULT *seq(double **in, int height, int width, double accuracy) {
 
         for (int i = 1; i < height - 1; i++) {
             for (int j = 1; j < width - 1; j++) {
-                double val = arr[i - 1][j];
+                float val = arr[i - 1][j];
                 val += arr[i + 1][j];
                 val += arr[i][j - 1];
                 val += arr[i][j + 1];
@@ -253,7 +217,7 @@ RESULT *seq(double **in, int height, int width, double accuracy) {
             }
         }
 
-        double **tmp = arr;
+        float **tmp = arr;
         arr = arr2;
         arr2 = tmp;
     }
@@ -276,10 +240,10 @@ RESULT *seq(double **in, int height, int width, double accuracy) {
  * @param accuracy : The accuracy to work to.
  * @return : Whether any values changed by more than the accuracy.
  */
-int calculate(double **in, int height, int width, double accuracy)
+int calculate(float **in, int height, int width, float accuracy)
 {
     // This stores the line of new values being inserted into the sub-array
-    double *line = (double *) calloc(width,sizeof(double));
+    float *line = (float *) calloc(width,sizeof(float));
     int changed = 0;
 
     // Calculating the first new row as it is handled differently to the other
@@ -287,7 +251,7 @@ int calculate(double **in, int height, int width, double accuracy)
     line[0] = in[1][0];
     line[width - 1] = in[1][width - 1];
     for (int i = 1; i < width - 1; i++) {
-        double val = (in[0][i] + in[2][i] + in[1][i - 1] + in[1][i + 1]) / 4;
+        float val = (in[0][i] + in[2][i] + in[1][i - 1] + in[1][i + 1]) / 4;
         line[i] = val;
 
         if (!changed && (fabs((val - in[1][i])) > accuracy)) changed = 1;
@@ -295,7 +259,7 @@ int calculate(double **in, int height, int width, double accuracy)
 
     // Swapping the new top row into the array. Reusing the row that was
     // removed so that we don't need to allocate new memory.
-    double *tmp = in[1];
+    float *tmp = in[1];
     in[1] = line;
     line = tmp;
 
@@ -305,16 +269,12 @@ int calculate(double **in, int height, int width, double accuracy)
         line[width - 1] = in[i][width - 1];
 
         for (int j = 1; j < width - 1; j++) {
-            // The line hold the old values from the row it replaced which we
-            // now use for calculating the cells below it.
-            double val = line[j] + in[i + 1][j] + in[i][j - 1] + in[i][j + 1];
-            val /= 4;
+            float val = (line[j] + in[i + 1][j] + in[i][j - 1] + in[i][j + 1]) / 4;
             line[j] = val;
 
             if (!changed && (fabs((val - in[i][j])) > accuracy)) changed = 1;
         }
 
-        // Swapping the new row with the row being replaced.
         tmp = in[i];
         in[i] = line;
         line = tmp;
@@ -325,17 +285,7 @@ int calculate(double **in, int height, int width, double accuracy)
     return changed;
 }
 
-/**
- * Sends a row of values to the destination process with a given tag. The row
- * will be divided into chunks of 30000 if it has a width larger than 30000.
- *
- * @param row : The row to send.
- * @param width : The width of the row.
- * @param dest : The destination process to send the row to.
- * @param tag : The tag for the send message.
- * @return : An error status if a send message failed or success otherwise.
- */
-int sendRow(double *row, int width, int dest, int tag)
+int sendRow(float *row, int width, int dest, int tag)
 {
     int w = width;
     int acc = 0;
@@ -343,12 +293,12 @@ int sendRow(double *row, int width, int dest, int tag)
 
     while (w > 0) {
         if (w > 30000) {
-            rc = MPI_Send(row + acc, 30000, MPI_DOUBLE, dest, tag, MPI_COMM_WORLD);
+            rc = MPI_Send(row + acc, 30000, MPI_FLOAT, dest, tag, MPI_COMM_WORLD);
             if (rc != MPI_SUCCESS) return rc;
             w -= 30000;
             acc += 30000;
         } else {
-            rc = MPI_Send(row + acc, w, MPI_DOUBLE, dest, tag, MPI_COMM_WORLD);
+            rc = MPI_Send(row + acc, w, MPI_FLOAT, dest, tag, MPI_COMM_WORLD);
             if (rc != MPI_SUCCESS) return rc;
             w -= w;
         }
@@ -357,18 +307,7 @@ int sendRow(double *row, int width, int dest, int tag)
     return MPI_SUCCESS;
 }
 
-/**
- * Receives a row of values from the destination process with a given tag. The
- * receive will be divided into chunks of 30000 if the row being received has a
- * width larger than 30000.
- *
- * @param row : The row to place the received values into.
- * @param width : The width of the row.
- * @param dest : The destination process to receive the row from.
- * @param tag : The tag of the message being received.
- * @return : An error status if a receive failed or success otherwise.
- */
-int receiveRow(double *row, int width, int dest, int tag)
+int receiveRow(float *row, int width, int dest, int tag)
 {
     int w = width;
     int acc = 0;
@@ -377,12 +316,12 @@ int receiveRow(double *row, int width, int dest, int tag)
     while (w > 0) {
         MPI_Status stat;
         if (w > 30000) {
-            rc = MPI_Recv(row + acc, 30000, MPI_DOUBLE, dest, tag, MPI_COMM_WORLD, &stat);
+            rc = MPI_Recv(row + acc, 30000, MPI_FLOAT, dest, tag, MPI_COMM_WORLD, &stat);
             if (rc != MPI_SUCCESS) return rc;
             w -= 30000;
             acc += 30000;
         } else {
-            rc = MPI_Recv(row + acc, w, MPI_DOUBLE, dest, tag, MPI_COMM_WORLD, &stat);
+            rc = MPI_Recv(row + acc, w, MPI_FLOAT, dest, tag, MPI_COMM_WORLD, &stat);
             if (rc != MPI_SUCCESS) return rc;
             w -= w;
         }
@@ -406,7 +345,7 @@ int receiveRow(double *row, int width, int dest, int tag)
  * @param loop : The current iteration loop count.
  * @return : 0 if successful and 1 otherwise.
  */
-int sendAndReceiveResults(double **arr, int height, int width, int myrank, int nproc, int loop)
+int sendAndReceiveResults(float **arr, int height, int width, int myrank, int nproc, int loop)
 {
     int w = width;
     int acc = 0;
@@ -422,13 +361,13 @@ int sendAndReceiveResults(double **arr, int height, int width, int myrank, int n
 
     while (w > 0) {
         if (w > 30000) {
-            if (myrank > 0) MPI_Isend(arr[1] + acc, 30000, MPI_DOUBLE, myrank - 1, loop, MPI_COMM_WORLD, &reqs[reqCount++]);
-            if (myrank < nproc - 1) MPI_Isend(arr[height - 2] + acc, 30000, MPI_DOUBLE, myrank + 1, loop, MPI_COMM_WORLD, &reqs[reqCount++]);
+            if (myrank > 0) MPI_Isend(arr[1] + acc, 30000, MPI_FLOAT, myrank - 1, loop, MPI_COMM_WORLD, &reqs[reqCount++]);
+            if (myrank < nproc - 1) MPI_Isend(arr[height - 2] + acc, 30000, MPI_FLOAT, myrank + 1, loop, MPI_COMM_WORLD, &reqs[reqCount++]);
             w -= 30000;
             acc += 30000;
         } else {
-            if (myrank > 0) MPI_Isend(arr[1] + acc, w, MPI_DOUBLE, myrank - 1, loop, MPI_COMM_WORLD, &reqs[reqCount++]);
-            if (myrank < nproc - 1) MPI_Isend(arr[height - 2] + acc, w, MPI_DOUBLE, myrank + 1, loop, MPI_COMM_WORLD, &reqs[reqCount++]);
+            if (myrank > 0) MPI_Isend(arr[1] + acc, w, MPI_FLOAT, myrank - 1, loop, MPI_COMM_WORLD, &reqs[reqCount++]);
+            if (myrank < nproc - 1) MPI_Isend(arr[height - 2] + acc, w, MPI_FLOAT, myrank + 1, loop, MPI_COMM_WORLD, &reqs[reqCount++]);
             w -= w;
         }
     }
@@ -438,13 +377,13 @@ int sendAndReceiveResults(double **arr, int height, int width, int myrank, int n
 
     while (w > 0) {
         if (w > 30000) {
-            if (myrank > 0) MPI_Irecv(arr[0] + acc, 30000, MPI_DOUBLE, myrank - 1, loop, MPI_COMM_WORLD, &reqs[reqCount++]);
-            if (myrank < nproc - 1) MPI_Irecv(arr[height - 1] + acc, 30000, MPI_DOUBLE, myrank + 1, loop, MPI_COMM_WORLD, &reqs[reqCount++]);
+            if (myrank > 0) MPI_Irecv(arr[0] + acc, 30000, MPI_FLOAT, myrank - 1, loop, MPI_COMM_WORLD, &reqs[reqCount++]);
+            if (myrank < nproc - 1) MPI_Irecv(arr[height - 1] + acc, 30000, MPI_FLOAT, myrank + 1, loop, MPI_COMM_WORLD, &reqs[reqCount++]);
             w -= 30000;
             acc += 30000;
         } else {
-            if (myrank > 0) MPI_Irecv(arr[0] + acc, w, MPI_DOUBLE, myrank - 1, loop, MPI_COMM_WORLD, &reqs[reqCount++]);
-            if (myrank < nproc - 1) MPI_Irecv(arr[height - 1] + acc, w, MPI_DOUBLE, myrank + 1, loop, MPI_COMM_WORLD, &reqs[reqCount++]);
+            if (myrank > 0) MPI_Irecv(arr[0] + acc, w, MPI_FLOAT, myrank - 1, loop, MPI_COMM_WORLD, &reqs[reqCount++]);
+            if (myrank < nproc - 1) MPI_Irecv(arr[height - 1] + acc, w, MPI_FLOAT, myrank + 1, loop, MPI_COMM_WORLD, &reqs[reqCount++]);
             w -= w;
         }
     }
@@ -469,9 +408,9 @@ int sendAndReceiveResults(double **arr, int height, int width, int myrank, int n
  * @return : If the current process is process 0 then this will be the final
  *           array, otherwise NULL is returned.
  */
-double **gatherArray(double **arr, int height, int width, int myrank, int nproc)
+float **gatherArray(float **arr, int height, int width, int myrank, int nproc)
 {
-    double **retArr;
+    float **retArr;
 
     if (nproc == 1) {
         retArr = createArray(width, width);
@@ -566,7 +505,7 @@ int main(int argc, char **argv)
     srand(ar->randSeed);
 
     int width = ar->size;
-    double accuracy = ar->accuracy;
+    float accuracy = ar->accuracy;
 
     free(ar);
 
@@ -589,15 +528,14 @@ int main(int argc, char **argv)
 
     // These default values should result in the values settling roughly as the
     // centre of the array becomes non-zero.
-    double randMax = (width / 2) * accuracy;
-    double randMin = 0 - randMax;
-    double randRange = (randMax - randMin);
-    double randDiv = RAND_MAX / randRange;
+    float randMax = 10.0;
+    float randMin = -10.0;
+    float randRange = (randMax - randMin);
+    float randDiv = RAND_MAX / randRange;
 
-    double **in = createArray(height, width);
-    double **original; // Used for correctness testing on small arrays
+    float **in = createArray(height, width);
+    float **original;
 
-    // Building the initial array
     if (myrank == 0) {
         if (width <= 10000) {
             original = createArray(width, width);
@@ -683,19 +621,13 @@ int main(int argc, char **argv)
     while (cont[0]) {
         loop++;
         cont[0] = calculate(in, height, width, accuracy);
-
         MPI_Request statReq;
-        if (myrank > 0)
-            MPI_Isend(cont, 1, MPI_INT, 0, 0, MPI_COMM_WORLD, &statReq);
-
-        int sendRes = sendAndReceiveResults(
-                in, height, width, myrank, nproc, loop);
-
+        if (myrank > 0) MPI_Isend(cont, 1, MPI_INT, 0, 0, MPI_COMM_WORLD, &statReq);
+        int sendRes = sendAndReceiveResults(in, height, width, myrank, nproc, loop);
         if (sendRes != 0) {
             if (myrank == 0) printf("Error sending results.\n");
             MPI_Abort(MPI_COMM_WORLD, MPI_ERR_UNKNOWN);
         }
-
         if (myrank == 0) {
             int tmpVal = cont[0];
             for (int i = 1; i < nproc; i++) {
@@ -722,7 +654,7 @@ int main(int argc, char **argv)
 
     // Used for correctness testing
     if (width <= 10000) {
-        double **final = gatherArray(in, height, width, myrank, nproc);
+        float **final = gatherArray(in, height, width, myrank, nproc);
         if (myrank == 0) {
             if (final == NULL) {
                 printf("Error gathering final array.\n");
@@ -745,8 +677,6 @@ int main(int argc, char **argv)
             free(res);
         }
     } else if (myrank == 0) {
-        // Only useful for checking the sums of two identical runs; same array,
-        // same processor count. Left as an additional correctness check.
         printf("Sum: %1.5f\n", sumArray(in, height, width));
     }
 

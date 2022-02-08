@@ -84,7 +84,11 @@ Mkfile.old
 dkms.conf
 
 ### MMC ###
+hpc/
 batch/
+output/
+error/
+results/
 *.slurm
 
 ### Make ###
